@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+bun.lockb
+
+# Build outputs
+dist/
+build/
+.next/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# Anchor / Solana
+target/
+.anchor/
+test-ledger/
+**/keypairs/
+*.so
+
+# Solana keypairs — NEVER commit
+*-keypair.json
+id.json
+solana-keypair*.json
+
+# AWS / secrets
+.env
+.env.*
+!.env.example
+.aws/
+*.pem
+
+# Expo / mobile
+*.apk
+*.aab
+*.ipa
+android/
+ios/
+.eas/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Lambda packaging
+lambda/dist/
+lambda/*.zip
+
+# Kiro
+.kiro/
+kiro-cache/

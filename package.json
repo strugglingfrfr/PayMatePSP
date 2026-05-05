@@ -1,0 +1,20 @@
+{
+  "name": "paymate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mobile credit infrastructure for stablecoin payments. Solana + AWS Bedrock + Coinbase x402 on Base.",
+  "scripts": {
+    "mobile": "cd mobile && bun run start",
+    "program:build": "cd program && anchor build",
+    "program:deploy": "cd program && anchor deploy --provider.cluster devnet",
+    "program:test": "cd program && anchor test",
+    "lambda:build": "cd lambda && bun run build",
+    "lambda:deploy": "cd lambda && bun run deploy",
+    "agent:dev": "cd agent && bun run dev",
+    "agent:deploy": "cd agent && bun run deploy"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3"
+  }
+}

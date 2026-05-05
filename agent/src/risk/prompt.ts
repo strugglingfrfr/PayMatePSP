@@ -3,70 +3,95 @@ import type { KybData, ComplianceResult } from "../lib/types";
 /**
  * Build the Bedrock Claude Haiku prompt for KYR scoring.
  *
- * Phase 2b: placeholder template.
- * Phase 2c: real prompt engineering with structured output format.
+ * Returns a strict-JSON-output prompt asking Claude to score the PSP
+ * against the 14-criteria KYR matrix. The same matrix used in PayMate v1
+ * (EthGlobal Cannes 2026) — proven scoring framework.
+ *
+ * Rating bands match v1: AAA ≥90, AA 80-89, A 65-79, B/C <65.
+ * These bands feed into the on-chain personal_rate_bps via the admin
+ * approval flow (AAA → 30 bps/day, AA → 45, A → 60, B/C → 85).
  */
-// TODO PHASE 2C: refine prompt with few-shot examples and structured JSON output format
 export function buildRiskPrompt(
   kyb: KybData,
   complianceResult?: ComplianceResult,
 ): string {
   const complianceSection = complianceResult
     ? `
-## Compliance Screening Results
+## Compliance Screening Results (specialized sub-agent output)
 - Sanctions clear: ${complianceResult.sanctionsClear}
-- AML flags: ${complianceResult.amlFlags.length > 0 ? complianceResult.amlFlags.join(", ") : "None"}
-- PEP matches: ${complianceResult.pepMatches.length > 0 ? complianceResult.pepMatches.join(", ") : "None"}
-- Adverse media: ${complianceResult.adverseMedia.length > 0 ? complianceResult.adverseMedia.join(", ") : "None"}
-- Overall status: ${complianceResult.overallStatus}
-- Confidence: ${complianceResult.confidence}
+- AML flags: ${complianceResult.amlFlags.length > 0 ? complianceResult.amlFlags.join(", ") : "none"}
+- PEP matches: ${complianceResult.pepMatches.length > 0 ? complianceResult.pepMatches.join(", ") : "none"}
+- Adverse media: ${complianceResult.adverseMedia.length > 0 ? complianceResult.adverseMedia.join(", ") : "none"}
+- Overall: ${complianceResult.overallStatus} (confidence ${complianceResult.confidence})
+
+Use this to inform amlComplianceHealth and creditBureau scores. FLAGGED status caps the rating at A.
 `
-    : "\n## Compliance Screening\nNot performed (low-risk profile, cost optimization).\n";
+    : `
+## Compliance Screening
+Not performed (low-volume profile, sub-$1M monthly, low-risk corridor — cost-optimization decision by the agent). Score amlComplianceHealth based on stated AML policy alone.
+`;
 
-  return `You are a credit risk analyst for PayMate, a Solana-based credit pool for Payment Service Providers.
+  return `You are a senior credit underwriter at PayMate — a Solana-based stablecoin credit pool for Payment Service Providers (PSPs). You score PSP applicants on a 14-criteria KYR matrix that determines their on-chain credit terms.
 
-Analyze the following KYB (Know Your Business) submission and produce a KYR (Know Your Risk) score.
+Analyze the KYB submission below and return a strict-JSON KYR assessment.
 
-## KYB Data
-- Company: ${kyb.companyName}
+## KYB Submission
+- Company name: ${kyb.companyName}
 - Jurisdiction: ${kyb.jurisdiction}
 - Years in operation: ${kyb.yearsInOperation}
 - Business type: ${kyb.businessType}
-- Monthly transaction volume: $${kyb.monthlyTransactionVolume.toLocaleString()}
-- Annual revenue: $${kyb.annualRevenue.toLocaleString()}
+- Monthly transaction volume: $${kyb.monthlyTransactionVolume.toLocaleString()} USD
+- Annual revenue: $${kyb.annualRevenue.toLocaleString()} USD
 - AML policy in place: ${kyb.amlPolicyInPlace}
 - Primary corridor: ${kyb.primaryCorridor}
 ${complianceSection}
-## Scoring Criteria (total max = 100)
-Score each criterion on its scale:
-1. incorporationRegulatory (max 5)
-2. businessAgeTrackRecord (max 5)
-3. transactionVolumeVelocity (max 10)
-4. settlementPartnerQuality (max 10)
-5. corridorRemittanceRisk (max 8)
-6. prefundingCycleLiquidity (max 8)
-7. historicalDataAuditTrail (max 8)
-8. bankFloatManagement (max 7)
-9. financialStrength (max 10)
-10. amlComplianceHealth (max 8)
-11. technologyIntegration (max 5)
-12. guarantorsCollateral (max 5)
-13. previousFinancingPayback (max 7)
-14. creditBureau (max 4)
+## Scoring Rubric (each criterion graded out of its max; total = 100)
 
-## Output Format
-Respond with valid JSON only:
+| # | Criterion | Max | What you're judging |
+|---|-----------|-----|---------------------|
+| 1 | incorporationRegulatory | 5 | Quality of jurisdiction's regulatory regime (FATF-compliant > offshore) |
+| 2 | businessAgeTrackRecord | 5 | Years operating; >5y = full marks, <2y = low |
+| 3 | transactionVolumeVelocity | 10 | Volume scale + velocity stability |
+| 4 | settlementPartnerQuality | 10 | Quality of settlement banks/PSPs (inferred from volume + jurisdiction) |
+| 5 | corridorRemittanceRisk | 8 | Risk of the corridor (e.g. NG-GB higher than GB-FR) |
+| 6 | prefundingCycleLiquidity | 8 | Ability to handle T+1/T+2 prefunding gaps |
+| 7 | historicalDataAuditTrail | 8 | Operational maturity proxy (years × volume) |
+| 8 | bankFloatManagement | 7 | Cash management sophistication |
+| 9 | financialStrength | 10 | Revenue scale + likely margins |
+| 10 | amlComplianceHealth | 8 | AML policy + compliance screening result |
+| 11 | technologyIntegration | 5 | API/SDK readiness (assumed mid-tier unless flagged) |
+| 12 | guarantorsCollateral | 5 | Default 3 unless info suggests better |
+| 13 | previousFinancingPayback | 7 | Default 5 if no flags from compliance |
+| 14 | creditBureau | 4 | Default 3 unless adverse media |
+
+## Rating Bands (apply strictly)
+- **AAA**: totalScore ≥ 90 (premium, lowest borrowing rate)
+- **AA**: totalScore 80–89
+- **A**: totalScore 65–79
+- **B/C**: totalScore < 65 (highest borrowing rate)
+
+## Output Schema
+Return ONLY this JSON, no preamble, no markdown fences, no trailing text:
+
 {
-  "scores": { "<criterion>": <number>, ... },
-  "totalScore": <number>,
+  "scores": {
+    "incorporationRegulatory": <int 0-5>,
+    "businessAgeTrackRecord": <int 0-5>,
+    "transactionVolumeVelocity": <int 0-10>,
+    "settlementPartnerQuality": <int 0-10>,
+    "corridorRemittanceRisk": <int 0-8>,
+    "prefundingCycleLiquidity": <int 0-8>,
+    "historicalDataAuditTrail": <int 0-8>,
+    "bankFloatManagement": <int 0-7>,
+    "financialStrength": <int 0-10>,
+    "amlComplianceHealth": <int 0-8>,
+    "technologyIntegration": <int 0-5>,
+    "guarantorsCollateral": <int 0-5>,
+    "previousFinancingPayback": <int 0-7>,
+    "creditBureau": <int 0-4>
+  },
+  "totalScore": <int — sum of scores>,
   "rating": "AAA" | "AA" | "A" | "B/C",
-  "reasoning": "<2-4 sentences>"
-}
-
-Rating thresholds:
-- AAA: 85-100
-- AA: 70-84
-- A: 55-69
-- B/C: 0-54
-`;
+  "reasoning": "<2-3 sentences citing the strongest positive and the most material concern>"
+}`;
 }

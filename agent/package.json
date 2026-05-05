@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build:risk": "esbuild src/risk/index.ts --bundle --platform=node --target=node20 --outfile=dist/risk/index.js --external:@aws-sdk/* --minify",
-    "build:compliance": "esbuild src/compliance/index.ts --bundle --platform=node --target=node20 --outfile=dist/compliance/index.js --external:@aws-sdk/* --minify",
+    "build:risk": "esbuild src/risk/index.ts --bundle --platform=node --target=node20 --outfile=dist/risk/index.js --minify",
+    "build:compliance": "esbuild src/compliance/index.ts --bundle --platform=node --target=node20 --outfile=dist/compliance/index.js --minify",
     "build": "bun run build:risk && bun run build:compliance",
     "package": "bun run build && rm -f dist/risk.zip dist/compliance.zip && cd dist/risk && zip -q ../risk.zip index.js && cd ../compliance && zip -q ../compliance.zip index.js && cd ../..",
     "deploy": "bun run package && bash infra/deploy.sh"

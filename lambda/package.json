@@ -13,7 +13,8 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
-    "@solana/web3.js": "^1.95.0"
+    "@solana/web3.js": "^1.95.0",
+    "viem": "^2.48.8"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.143",

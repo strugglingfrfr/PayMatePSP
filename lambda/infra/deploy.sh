@@ -98,6 +98,23 @@ cd dist && zip -q -r ../lambda.zip . && cd ..
 SIZE=$(du -h lambda.zip | cut -f1)
 echo "  ✓ lambda.zip ($SIZE)"
 
+# -----------------------------------------------------------------------------
+# Encode admin keypair for Lambda env var.
+# -----------------------------------------------------------------------------
+echo ""
+echo "→ Encoding admin keypair for Lambda"
+ADMIN_PK=$(bun run infra/encode-admin-key.ts)
+if [ -z "$ADMIN_PK" ]; then
+  echo "  ❌ failed to encode admin keypair"
+  exit 1
+fi
+echo "  ✓ admin keypair encoded (base58, $(echo -n "$ADMIN_PK" | wc -c | tr -d ' ') chars)"
+
+# Risk agent URL — same API Gateway, /agent/risk path
+RISK_AGENT_URL_VAL="https://${API_ID:-wdex0emoga}.execute-api.${REGION}.amazonaws.com/agent/risk"
+
+ENV_VARS="Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h,SOLANA_ADMIN_PRIVATE_KEY=$ADMIN_PK,RISK_AGENT_URL=$RISK_AGENT_URL_VAL}"
+
 echo ""
 echo "→ Lambda function"
 if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >/dev/null 2>&1; then
@@ -105,6 +122,14 @@ if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$REGION" >
   aws lambda update-function-code \
     --function-name "$FUNCTION_NAME" \
     --zip-file fileb://lambda.zip \
+    --region "$REGION" >/dev/null
+  aws lambda wait function-updated \
+    --function-name "$FUNCTION_NAME" \
+    --region "$REGION"
+  aws lambda update-function-configuration \
+    --function-name "$FUNCTION_NAME" \
+    --environment "$ENV_VARS" \
+    --timeout 30 \
     --region "$REGION" >/dev/null
   aws lambda wait function-updated \
     --function-name "$FUNCTION_NAME" \
@@ -119,7 +144,7 @@ else
     --zip-file fileb://lambda.zip \
     --timeout 30 \
     --memory-size 256 \
-    --environment "Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h}" \
+    --environment "$ENV_VARS" \
     --region "$REGION" >/dev/null
   aws lambda wait function-active \
     --function-name "$FUNCTION_NAME" \
@@ -153,7 +178,7 @@ if [ -z "$API_ID" ]; then
   INTEGRATION_ID=$(aws apigatewayv2 get-integrations \
     --api-id "$API_ID" --region "$REGION" \
     --query "Items[0].IntegrationId" --output text)
-  for route in "POST /kyb/submit" "GET /kyb/status/{wallet}" "GET /pool/state"; do
+  for route in "POST /kyb/submit" "GET /kyb/status/{wallet}" "GET /pool/state" "POST /admin/init-pool" "POST /admin/approve"; do
     aws apigatewayv2 create-route \
       --api-id "$API_ID" \
       --route-key "$route" \

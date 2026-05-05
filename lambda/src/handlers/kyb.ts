@@ -1,8 +1,15 @@
-// KYB endpoints. Phase 2a: write/read DDB only — AI scoring lands in Phase 2c.
+// KYB endpoints. Phase 2d wires the orchestrator → Risk Agent x402 call.
 
-import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyStructuredResultV2,
+} from "aws-lambda";
 import { Tables, putItem, queryByPartition } from "../lib/ddb";
-import type { KybSubmission, ApiResponse } from "../types";
+import type {
+  ApiResponse,
+  KybSubmission,
+  KyrScore,
+} from "../types";
 
 const json = (
   status: number,
@@ -13,9 +20,14 @@ const json = (
   body: JSON.stringify(body),
 });
 
+const RISK_AGENT_URL = process.env.RISK_AGENT_URL ?? "";
+// Stub x402 payment header — real EIP-3009 signing is Phase 2c+ on the
+// agent side. The agent currently accepts the stub as long as the header is present.
+const STUB_PAYMENT_HEADER = "c3R1Yg=="; // base64("stub")
+
 // POST /kyb/submit
-// Body: { walletAddress, kybData: { ... 8 fields } }
-// Response: { ok: true, data: { walletAddress, submittedAt, status: "pending" } }
+// Body: { walletAddress, kybData }
+// Calls the Risk Agent, stores the full KYR result (or pending+error if agent fails).
 export async function submitKyb(
   event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyStructuredResultV2> {
@@ -50,23 +62,87 @@ export async function submitKyb(
   }
 
   const submittedAt = Date.now();
-  const submission: KybSubmission = {
+
+  // Optimistically write a pending row first so the mobile app can poll
+  // immediately and see "scoring".
+  const initial: KybSubmission = {
     walletAddress,
     submittedAt,
     kybData,
-    status: "pending",
+    status: "scoring",
   };
+  await putItem(Tables.KybSubmissions, initial);
 
-  await putItem(Tables.KybSubmissions, submission);
+  // Call the Risk Agent. This is where the AI scoring happens.
+  let kyrScore: KyrScore | undefined;
+  let decision: string | undefined;
+  let error: string | undefined;
+
+  if (!RISK_AGENT_URL) {
+    error = "RISK_AGENT_URL not configured";
+  } else {
+    try {
+      const r = await fetch(RISK_AGENT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-payment": STUB_PAYMENT_HEADER,
+        },
+        body: JSON.stringify(kybData),
+      });
+      if (!r.ok) {
+        error = `risk agent returned ${r.status}`;
+      } else {
+        const body = (await r.json()) as {
+          ok: boolean;
+          data?: KyrScore;
+          decision?: string;
+          error?: string;
+        };
+        if (body.ok && body.data) {
+          kyrScore = body.data;
+          decision = body.decision;
+        } else {
+          error = body.error ?? "risk agent returned ok:false";
+        }
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  // Persist the final result.
+  const final: KybSubmission = {
+    ...initial,
+    status: kyrScore ? "scoring" : "error", // "scoring" until admin approves; "error" if agent failed
+    kyrScore,
+    reasoning: kyrScore?.reasoning,
+    creditLimit: undefined, // set on approval
+    personalRateBps: undefined,
+  };
+  await putItem(Tables.KybSubmissions, final);
   await putItem(Tables.Users, {
     walletAddress,
     role: "PSP",
     lastKybSubmittedAt: submittedAt,
   });
 
+  if (error) {
+    return json(502, {
+      ok: false,
+      error: `risk agent: ${error}`,
+    });
+  }
+
   return json(200, {
     ok: true,
-    data: { walletAddress, submittedAt, status: "pending" },
+    data: {
+      walletAddress,
+      submittedAt,
+      kyrScore,
+      decision,
+      status: "scored — awaiting admin approval",
+    },
   });
 }
 

@@ -25,10 +25,7 @@ export type KybSubmission = {
   approvalTxSignature?: string;
 };
 
-export type KyrScore = {
-  totalScore: number; // 0-100
-  rating: "AAA" | "AA" | "A" | "B/C";
-  // The 14 criteria (0-x range each, summing to <=100):
+export type KyrCriterionScores = {
   incorporationRegulatory: number;
   businessAgeTrackRecord: number;
   transactionVolumeVelocity: number;
@@ -43,6 +40,22 @@ export type KyrScore = {
   guarantorsCollateral: number;
   previousFinancingPayback: number;
   creditBureau: number;
+};
+
+export type KyrScore = {
+  scores: KyrCriterionScores;
+  totalScore: number; // 0-100
+  rating: "AAA" | "AA" | "A" | "B/C";
+  reasoning: string;
+  complianceCalled: boolean;
+  complianceResult?: {
+    sanctionsClear: boolean;
+    amlFlags: string[];
+    pepMatches: string[];
+    adverseMedia: string[];
+    overallStatus: "CLEAR" | "FLAGGED";
+    confidence: number;
+  };
 };
 
 export type AgentCallLog = {

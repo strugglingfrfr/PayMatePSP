@@ -1,0 +1,912 @@
+{
+  "address": "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h",
+  "metadata": {
+    "name": "paymate",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "deposit",
+      "docs": [
+        "LP deposits USDC into the pool. One open deposit per LP at a time:",
+        "to add more, withdraw first then re-deposit."
+      ],
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "lp_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "lp_token_account",
+          "writable": true
+        },
+        {
+          "name": "lp",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_pool",
+      "docs": [
+        "Admin one-shot. Sets pool params and creates the USDC vault."
+      ],
+      "discriminator": [
+        95,
+        180,
+        10,
+        172,
+        84,
+        174,
+        232,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "drawdown_limit",
+          "type": "u64"
+        },
+        {
+          "name": "default_psp_rate_bps",
+          "type": "u16"
+        },
+        {
+          "name": "lp_apy_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "repay",
+      "docs": [
+        "PSP repays. `amount` must cover principal + computed fee.",
+        "Fee = position * personal_rate_bps * elapsed_secs / (SECONDS_PER_DAY * BPS_DIVISOR).",
+        "Anything above principal goes to fee_reserve (overpayment is donated to LPs)."
+      ],
+      "discriminator": [
+        234,
+        103,
+        67,
+        82,
+        208,
+        234,
+        219,
+        166
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "psp_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  115,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "psp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "psp_token_account",
+          "writable": true
+        },
+        {
+          "name": "psp",
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "request_drawdown",
+      "docs": [
+        "PSP requests to draw `amount` USDC. Must be approved (credit_limit > 0),",
+        "within their limit, within the global drawdown limit, and the pool must",
+        "have available liquidity. One active position at a time."
+      ],
+      "discriminator": [
+        81,
+        80,
+        214,
+        241,
+        237,
+        162,
+        182,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "psp_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  115,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "psp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "psp_token_account",
+          "writable": true
+        },
+        {
+          "name": "psp",
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_credit_limit",
+      "docs": [
+        "Admin-only. Approves a PSP for credit at a personal rate derived from",
+        "the AI KYR rating (e.g. AAA → 30 bps/day, B/C → 85 bps/day).",
+        "Idempotent — can be called again to update credit limit / rate."
+      ],
+      "discriminator": [
+        74,
+        241,
+        91,
+        78,
+        48,
+        66,
+        126,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "psp_owner"
+        },
+        {
+          "name": "psp_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  115,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "psp_owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pool"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "credit_limit",
+          "type": "u64"
+        },
+        {
+          "name": "personal_rate_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "docs": [
+        "LP withdraws full principal + accrued yield, capped by what the pool",
+        "has actually collected in fees. Yield is computed pro-rata to the",
+        "second since last deposit."
+      ],
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true
+        },
+        {
+          "name": "lp_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  112
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "lp_token_account",
+          "writable": true
+        },
+        {
+          "name": "lp",
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "LpAccount",
+      "discriminator": [
+        23,
+        166,
+        251,
+        222,
+        23,
+        27,
+        215,
+        48
+      ]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    },
+    {
+      "name": "PspAccount",
+      "discriminator": [
+        92,
+        137,
+        137,
+        186,
+        90,
+        181,
+        213,
+        191
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CreditLimitSet",
+      "discriminator": [
+        21,
+        100,
+        156,
+        184,
+        242,
+        16,
+        59,
+        169
+      ]
+    },
+    {
+      "name": "Deposited",
+      "discriminator": [
+        111,
+        141,
+        26,
+        45,
+        161,
+        35,
+        100,
+        57
+      ]
+    },
+    {
+      "name": "DrawdownExecuted",
+      "discriminator": [
+        68,
+        70,
+        124,
+        59,
+        230,
+        207,
+        201,
+        245
+      ]
+    },
+    {
+      "name": "PoolInitialized",
+      "discriminator": [
+        100,
+        118,
+        173,
+        87,
+        12,
+        198,
+        254,
+        229
+      ]
+    },
+    {
+      "name": "RepaymentProcessed",
+      "discriminator": [
+        4,
+        68,
+        8,
+        11,
+        109,
+        185,
+        23,
+        224
+      ]
+    },
+    {
+      "name": "Withdrawn",
+      "discriminator": [
+        20,
+        89,
+        223,
+        198,
+        194,
+        124,
+        219,
+        13
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Only the admin can perform this action"
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6002,
+      "name": "ZeroRate",
+      "msg": "Personal rate must be greater than zero"
+    },
+    {
+      "code": 6003,
+      "name": "ExceedsDrawdownLimit",
+      "msg": "Amount exceeds the global drawdown limit"
+    },
+    {
+      "code": 6004,
+      "name": "ExceedsCreditLimit",
+      "msg": "Amount exceeds your approved credit limit"
+    },
+    {
+      "code": 6005,
+      "name": "InsufficientLiquidity",
+      "msg": "Insufficient liquidity in pool"
+    },
+    {
+      "code": 6006,
+      "name": "ActivePosition",
+      "msg": "PSP has an active drawdown; repay first"
+    },
+    {
+      "code": 6007,
+      "name": "PspNotApproved",
+      "msg": "PSP not approved for credit (credit_limit is zero)"
+    },
+    {
+      "code": 6008,
+      "name": "NoActivePosition",
+      "msg": "No active position to repay"
+    },
+    {
+      "code": 6009,
+      "name": "InsufficientRepayment",
+      "msg": "Repayment amount must cover principal + fee"
+    },
+    {
+      "code": 6010,
+      "name": "ExistingDeposit",
+      "msg": "LP has an existing deposit; withdraw first"
+    },
+    {
+      "code": 6011,
+      "name": "NothingToWithdraw",
+      "msg": "Nothing to withdraw"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidVault",
+      "msg": "Invalid vault account for this pool"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidMint",
+      "msg": "Token account mint does not match pool USDC mint"
+    },
+    {
+      "code": 6014,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "CreditLimitSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "psp",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          },
+          {
+            "name": "personal_rate_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Deposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DrawdownExecuted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "psp",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LpAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "deposited_amount",
+            "type": "u64"
+          },
+          {
+            "name": "last_deposit_ts",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_liquidity",
+            "type": "u64"
+          },
+          {
+            "name": "available_liquidity",
+            "type": "u64"
+          },
+          {
+            "name": "fee_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "drawdown_limit",
+            "type": "u64"
+          },
+          {
+            "name": "default_psp_rate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_apy_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "drawdown_limit",
+            "type": "u64"
+          },
+          {
+            "name": "default_psp_rate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "lp_apy_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PspAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "credit_limit",
+            "type": "u64"
+          },
+          {
+            "name": "personal_rate_bps",
+            "type": "u16"
+          },
+          {
+            "name": "active_position_amount",
+            "type": "u64"
+          },
+          {
+            "name": "active_position_drawdown_ts",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RepaymentProcessed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "psp",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "lp",
+            "type": "pubkey"
+          },
+          {
+            "name": "principal",
+            "type": "u64"
+          },
+          {
+            "name": "yield_paid",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}

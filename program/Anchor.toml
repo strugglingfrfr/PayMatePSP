@@ -12,10 +12,10 @@ program = "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h"
 program = "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "cargo test"
+test = "bun x ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
 
 [hooks]

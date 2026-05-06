@@ -20,10 +20,10 @@ const json = (
   body: JSON.stringify(body),
 });
 
+import { callPaidAgent } from "../lib/x402-client";
+
 const RISK_AGENT_URL = process.env.RISK_AGENT_URL ?? "";
-// Stub x402 payment header — real EIP-3009 signing is Phase 2c+ on the
-// agent side. The agent currently accepts the stub as long as the header is present.
-const STUB_PAYMENT_HEADER = "c3R1Yg=="; // base64("stub")
+const ORCHESTRATOR_PK = (process.env.ORCHESTRATOR_PRIVATE_KEY ?? "0x") as `0x${string}`;
 
 // POST /kyb/submit
 // Body: { walletAddress, kybData }
@@ -86,36 +86,21 @@ export async function submitKyb(
   let decision: string | undefined;
   let error: string | undefined;
 
-  if (!RISK_AGENT_URL) {
-    error = "RISK_AGENT_URL not configured";
+  if (!RISK_AGENT_URL || !ORCHESTRATOR_PK || ORCHESTRATOR_PK === "0x") {
+    error = "RISK_AGENT_URL or ORCHESTRATOR_PRIVATE_KEY not configured";
   } else {
-    try {
-      const r = await fetch(RISK_AGENT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-payment": STUB_PAYMENT_HEADER,
-        },
-        body: JSON.stringify(kybData),
-      });
-      if (!r.ok) {
-        error = `risk agent returned ${r.status}`;
-      } else {
-        const body = (await r.json()) as {
-          ok: boolean;
-          data?: KyrScore;
-          decision?: string;
-          error?: string;
-        };
-        if (body.ok && body.data) {
-          kyrScore = body.data;
-          decision = body.decision;
-        } else {
-          error = body.error ?? "risk agent returned ok:false";
-        }
-      }
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+    // Real x402 — sign EIP-3009 transferAuthorization, pay the Risk Agent
+    // in USDC on Base Sepolia. Coinbase facilitator settles on chain.
+    const result = await callPaidAgent<KyrScore>({
+      url: RISK_AGENT_URL,
+      payerPrivateKey: ORCHESTRATOR_PK,
+      body: kybData,
+    });
+    if (result.ok) {
+      kyrScore = result.data;
+      decision = result.decision;
+    } else {
+      error = result.error;
     }
   }
 

@@ -8,7 +8,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { Tables, getItem, putItem, queryByPartition } from "../lib/ddb";
+import { Tables, putItem, queryByPartition, scanAll } from "../lib/ddb";
 import {
   initializePool,
   setCreditLimit,
@@ -66,6 +66,34 @@ export async function initPoolHandler(
         explorerUrl: `https://solscan.io/tx/${result.txSignature}?cluster=devnet`,
       },
     });
+  } catch (err) {
+    return json(500, {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// GET /admin/psps
+// Lists all PSPs with their latest KYB submission. Used by the admin
+// "control room" view — no need to look up by wallet manually.
+export async function listPspsHandler(
+  _event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  try {
+    const all = await scanAll<KybSubmission>(Tables.KybSubmissions);
+    // Group by walletAddress, keep only the latest submission per wallet.
+    const latest = new Map<string, KybSubmission>();
+    for (const item of all) {
+      const cur = latest.get(item.walletAddress);
+      if (!cur || item.submittedAt > cur.submittedAt) {
+        latest.set(item.walletAddress, item);
+      }
+    }
+    const list = Array.from(latest.values()).sort(
+      (a, b) => b.submittedAt - a.submittedAt,
+    );
+    return json(200, { ok: true, data: list });
   } catch (err) {
     return json(500, {
       ok: false,

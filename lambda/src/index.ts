@@ -8,7 +8,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { submitKyb, getKybStatus } from "./handlers/kyb";
 import { getPoolState } from "./handlers/pool";
-import { initPoolHandler, approvePspHandler } from "./handlers/admin";
+import { initPoolHandler, approvePspHandler, listPspsHandler } from "./handlers/admin";
 
 type Route = {
   method: string;
@@ -22,6 +22,7 @@ const routes: Route[] = [
   { method: "GET", pattern: /^\/pool\/state$/, handler: getPoolState },
   { method: "POST", pattern: /^\/admin\/init-pool$/, handler: initPoolHandler },
   { method: "POST", pattern: /^\/admin\/approve$/, handler: approvePspHandler },
+  { method: "GET", pattern: /^\/admin\/psps$/, handler: listPspsHandler },
 ];
 
 export const handler = async (

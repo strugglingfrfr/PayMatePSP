@@ -113,7 +113,14 @@ echo "  ✓ admin keypair encoded (base58, $(echo -n "$ADMIN_PK" | wc -c | tr -d
 # Risk agent URL — same API Gateway, /agent/risk path
 RISK_AGENT_URL_VAL="https://${API_ID:-wdex0emoga}.execute-api.${REGION}.amazonaws.com/agent/risk"
 
-ENV_VARS="Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg,SOLANA_ADMIN_PRIVATE_KEY=$ADMIN_PK,RISK_AGENT_URL=$RISK_AGENT_URL_VAL}"
+# Orchestrator's Base Sepolia private key (for paying Risk Agent via x402)
+ORCHESTRATOR_PK=$(jq -r '.orchestrator.privateKey' .secrets/agent-keys.json 2>/dev/null)
+if [ -z "$ORCHESTRATOR_PK" ] || [ "$ORCHESTRATOR_PK" = "null" ]; then
+  echo "  ❌ orchestrator key missing from .secrets/agent-keys.json"
+  exit 1
+fi
+
+ENV_VARS="Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg,SOLANA_ADMIN_PRIVATE_KEY=$ADMIN_PK,RISK_AGENT_URL=$RISK_AGENT_URL_VAL,ORCHESTRATOR_PRIVATE_KEY=$ORCHESTRATOR_PK}"
 
 echo ""
 echo "→ Lambda function"

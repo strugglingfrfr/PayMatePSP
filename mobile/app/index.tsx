@@ -24,6 +24,13 @@ import { api, type PoolState } from "../src/lib/api";
 
 const ACCENT = PaymateColors.brandAccent;
 
+// Admin doesn't sign on-chain (Lambda holds the admin keypair server-side).
+// On mobile, "Admin" auth is email + password, not a wallet connect.
+// In production this would be SSO/MFA — hackathon hardcodes for the demo.
+const ADMIN_EMAIL = "admin@paymate.com";
+const ADMIN_PASSWORD = "paymate";
+const ADMIN_PUBKEY = "8A2rC3XX4fZ3Wo299JwuJoLgfFrgaZu1AL46gnmuueBA";
+
 export default function Splash() {
   const router = useRouter();
   const navState = useRootNavigationState();
@@ -31,6 +38,9 @@ export default function Splash() {
   const { role, setRole, loaded } = useRole();
   const { publicKey, connect, connectMock } = useWallet();
   const [mockInput, setMockInput] = useState("");
+  const [adminEmailInput, setAdminEmailInput] = useState("");
+  const [adminPwInput, setAdminPwInput] = useState("");
+  const [adminPwError, setAdminPwError] = useState(false);
   const [pool, setPool] = useState<PoolState | null>(null);
   const [connecting, setConnecting] = useState(false);
 
@@ -73,6 +83,17 @@ export default function Splash() {
     await connectMock(mockInput.trim());
   };
 
+  const handleAdminLogin = async () => {
+    const emailOk = adminEmailInput.trim().toLowerCase() === ADMIN_EMAIL;
+    const passwordOk = adminPwInput === ADMIN_PASSWORD;
+    if (emailOk && passwordOk) {
+      setAdminPwError(false);
+      await connectMock(ADMIN_PUBKEY);
+    } else {
+      setAdminPwError(true);
+    }
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.brand}>
@@ -107,8 +128,76 @@ export default function Splash() {
         </View>
       )}
 
-      {/* Wallet connect */}
-      {role && !publicKey && (
+      {/* Admin login (email + password — admin doesn't sign on-chain) */}
+      {role === "ADMIN" && !publicKey && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Admin Sign In</Text>
+          <Text style={styles.sectionHint}>
+            Admin operations sign via the server's keypair. No wallet required.
+          </Text>
+
+          <Text style={styles.adminFieldLabel}>Email</Text>
+          <TextInput
+            value={adminEmailInput}
+            onChangeText={(v) => {
+              setAdminEmailInput(v);
+              setAdminPwError(false);
+            }}
+            placeholder="admin@paymate.com"
+            placeholderTextColor={PaymateColors.textMuted}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              styles.mockInput,
+              adminPwError && { borderColor: PaymateColors.error },
+            ]}
+          />
+
+          <Text style={[styles.adminFieldLabel, { marginTop: Spacing.md }]}>
+            Password
+          </Text>
+          <TextInput
+            value={adminPwInput}
+            onChangeText={(v) => {
+              setAdminPwInput(v);
+              setAdminPwError(false);
+            }}
+            onSubmitEditing={handleAdminLogin}
+            placeholder="••••••••"
+            placeholderTextColor={PaymateColors.textMuted}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[
+              styles.mockInput,
+              adminPwError && { borderColor: PaymateColors.error },
+            ]}
+          />
+          {adminPwError && (
+            <Text style={styles.errorText}>Incorrect email or password.</Text>
+          )}
+
+          <Pressable
+            style={[
+              styles.connectBtn,
+              (!adminEmailInput || !adminPwInput) && { opacity: 0.4 },
+              { marginTop: Spacing.md },
+            ]}
+            onPress={handleAdminLogin}
+            disabled={!adminEmailInput || !adminPwInput}
+          >
+            <Text style={styles.connectBtnText}>Sign In</Text>
+          </Pressable>
+
+          <Pressable onPress={() => setRole(null)} style={styles.linkBtn}>
+            <Text style={styles.linkText}>← Back</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Wallet connect — LP and PSP only */}
+      {role && role !== "ADMIN" && !publicKey && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Connect Wallet</Text>
           <Text style={styles.sectionHint}>
@@ -344,4 +433,15 @@ const styles = StyleSheet.create({
 
   linkBtn: { paddingVertical: Spacing.lg, alignItems: "center" },
   linkText: { color: PaymateColors.textMuted, fontSize: 13 },
+  errorText: {
+    color: PaymateColors.error,
+    fontSize: 12,
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  adminFieldLabel: {
+    color: PaymateColors.textSecondary,
+    fontSize: 12,
+    marginBottom: Spacing.sm,
+  },
 });

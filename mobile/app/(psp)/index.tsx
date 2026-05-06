@@ -147,6 +147,8 @@ export default function PspPosition() {
             />
           </View>
 
+          <SectionBreakdown scores={kyb.kyrScore.scores} />
+
           {kyb.kyrScore.reasoning ? (
             <View style={styles.reasoningCard}>
               <Text style={styles.reasoningTitle}>AI Reasoning</Text>
@@ -249,6 +251,83 @@ export default function PspPosition() {
         </>
       )}
     </ScrollView>
+  );
+}
+
+// Mirror of the form's 4 sections, mapped to the 14 KYR criteria.
+const SECTIONS: Array<{
+  name: string;
+  keys: string[];
+  max: number;
+}> = [
+  {
+    name: "Company",
+    keys: ["incorporationRegulatory", "businessAgeTrackRecord", "historicalDataAuditTrail"],
+    max: 5 + 5 + 8, // 18
+  },
+  {
+    name: "Operations",
+    keys: [
+      "transactionVolumeVelocity",
+      "settlementPartnerQuality",
+      "corridorRemittanceRisk",
+      "prefundingCycleLiquidity",
+      "technologyIntegration",
+    ],
+    max: 10 + 10 + 8 + 8 + 5, // 41
+  },
+  {
+    name: "Financial",
+    keys: [
+      "bankFloatManagement",
+      "financialStrength",
+      "guarantorsCollateral",
+      "previousFinancingPayback",
+    ],
+    max: 7 + 10 + 5 + 7, // 29
+  },
+  {
+    name: "Compliance",
+    keys: ["amlComplianceHealth", "creditBureau"],
+    max: 8 + 4, // 12
+  },
+];
+
+function SectionBreakdown({
+  scores,
+}: {
+  scores: Record<string, number>;
+}) {
+  return (
+    <View style={styles.breakdownWrap}>
+      <Text style={styles.breakdownHeader}>Score by section</Text>
+      {SECTIONS.map((s) => {
+        const total = s.keys.reduce((acc, k) => acc + (scores[k] ?? 0), 0);
+        const pct = Math.round((total / s.max) * 100);
+        return (
+          <View key={s.name} style={styles.breakdownCard}>
+            <View style={styles.breakdownTopRow}>
+              <Text style={styles.breakdownName}>{s.name}</Text>
+              <Text style={styles.breakdownScore}>
+                {total}<Text style={styles.breakdownMax}>/{s.max}</Text>
+              </Text>
+            </View>
+            <View style={styles.barTrack}>
+              <View
+                style={[
+                  styles.barFill,
+                  {
+                    width: `${pct}%`,
+                    backgroundColor:
+                      pct >= 80 ? PaymateColors.success : pct >= 60 ? accent : PaymateColors.warning,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -452,4 +531,59 @@ const styles = StyleSheet.create({
     borderTopColor: PaymateColors.border,
   },
   activeMetaText: { color: PaymateColors.textMuted, fontSize: 12 },
+
+  // Section breakdown card
+  breakdownWrap: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.border,
+    backgroundColor: PaymateColors.bgCard,
+  },
+  breakdownHeader: {
+    color: PaymateColors.textSecondary,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: Spacing.md,
+  },
+  breakdownCard: {
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: PaymateColors.border,
+  },
+  breakdownTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginBottom: 8,
+  },
+  breakdownName: {
+    color: PaymateColors.textPrimary,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  breakdownScore: {
+    color: PaymateColors.textPrimary,
+    fontSize: 16,
+    fontFamily: "monospace",
+    fontWeight: "700",
+  },
+  breakdownMax: {
+    color: PaymateColors.textMuted,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  barTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: PaymateColors.border,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
 });

@@ -123,6 +123,8 @@ export const api = {
   kybStatus: (wallet: string) =>
     call<KybSubmission>(`/kyb/status/${wallet}`),
 
+  adminListPsps: () => call<KybSubmission[]>("/admin/psps"),
+
   adminInitPool: (args: {
     usdcMint: string;
     drawdownLimit?: number;

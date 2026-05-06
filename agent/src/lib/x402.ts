@@ -1,134 +1,193 @@
-/**
- * x402 Facilitator middleware (server side) + client helper.
- *
- * Implements the x402 payment protocol for Lambda handlers:
- * - Server side: requirePayment wraps a handler with 402 payment gating
- * - Client side: payX402 handles the 402 → sign → retry flow
- */
+// x402 Facilitator-backed middleware (server) + signing client.
+//
+// Implements the canonical "exact" scheme on Base Sepolia. Real USDC moves
+// between agent wallets via Coinbase's hosted facilitator — the facilitator
+// submits the EIP-3009 signed authorization to the USDC contract and pays
+// the gas. Our agents only need USDC, not ETH.
+//
+// Spec: https://github.com/coinbase/x402
 
 import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import type { X402PriceQuote, X402Settlement } from "./types";
+import {
+  createWalletClient,
+  http as viemHttp,
+  type LocalAccount,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+import type { X402Settlement } from "./types";
 
-// USDC on Base Sepolia
-const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+// Base Sepolia USDC mint (Circle).
+const USDC_BASE_SEPOLIA =
+  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
 
-// Coinbase x402 Facilitator endpoints
-const FACILITATOR_BASE = "https://x402.facilitator.coinbase.com";
+// Coinbase's public x402 facilitator. Submits EIP-3009 to chain, pays gas.
+const FACILITATOR_URL =
+  process.env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator";
+
+const NETWORK = "base-sepolia" as const;
+const X402_VERSION = 1;
 
 // ---------------------------------------------------------------------------
-// Server side — requirePayment middleware
+// Server side — requirePayment
 // ---------------------------------------------------------------------------
 
 export type X402Config = {
-  recipient: `0x${string}`; // who gets paid (this agent's wallet)
-  maxMicro: bigint; // upper bound in USDC micro-units (6 decimals)
+  recipient: `0x${string}`;
+  /** Exact amount to charge in micro-USDC (6 decimals). e.g. 50000n = $0.05 */
+  amountMicro: bigint;
   description: string;
 };
-
-type HandlerFn = (
-  event: APIGatewayProxyEventV2,
-  actuallyChargeMicro: (amountMicro: bigint) => void,
-) => Promise<{ statusCode: number; body: unknown }>;
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
 ) => Promise<APIGatewayProxyStructuredResultV2>;
 
+type HandlerFn = (
+  event: APIGatewayProxyEventV2,
+) => Promise<{ statusCode: number; body: unknown }>;
+
 /**
  * Wraps a Lambda handler with x402 payment gating.
  *
- * Flow:
- * 1. If no X-PAYMENT header → return 402 with price quote
- * 2. If X-PAYMENT present → verify with facilitator, run handler, settle
+ * No header → 402 with payment requirements JSON.
+ * Header present → verify with facilitator → run handler → settle (real USDC tx).
  */
 export function requirePayment(
   config: X402Config,
   handler: HandlerFn,
 ): LambdaHandler {
-  return async (
-    event: APIGatewayProxyEventV2,
-  ): Promise<APIGatewayProxyStructuredResultV2> => {
+  return async (event) => {
     const paymentHeader =
       event.headers?.["x-payment"] || event.headers?.["X-PAYMENT"];
 
-    // No payment → return 402 with price quote
-    if (!paymentHeader) {
-      const quote: X402PriceQuote & { mode: string; maxAmountMicro: string } = {
-        asset: "USDC",
-        network: "base-sepolia",
-        amountMicro: config.maxMicro,
-        recipient: config.recipient,
-        description: config.description,
-        mode: "upto",
-        maxAmountMicro: config.maxMicro.toString(),
-      };
+    const requirements = paymentRequirementsFor(config);
 
+    // No payment → 402 challenge per spec
+    if (!paymentHeader) {
       return {
         statusCode: 402,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(quote, (_key, value) =>
-          typeof value === "bigint" ? value.toString() : value,
-        ),
+        body: JSON.stringify({
+          x402Version: X402_VERSION,
+          accepts: [requirements],
+          error: "Payment required",
+        }),
       };
     }
 
-    // Payment present → verify with facilitator
-    // TODO PHASE 2C: verify the EIP-3009 transferAuthorization with Coinbase facilitator
-    // const verifyResponse = await fetch(`${FACILITATOR_BASE}/verify`, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({
-    //     payment: paymentHeader,
-    //     recipient: config.recipient,
-    //     asset: USDC_BASE_SEPOLIA,
-    //     network: "base-sepolia",
-    //   }),
-    // });
-    // if (!verifyResponse.ok) {
-    //   return { statusCode: 401, body: JSON.stringify({ error: "Payment verification failed" }) };
-    // }
+    // Decode the signed payload
+    let paymentPayload: unknown;
+    try {
+      paymentPayload = JSON.parse(
+        Buffer.from(paymentHeader, "base64").toString("utf8"),
+      );
+    } catch {
+      return errorResponse(400, "Malformed X-PAYMENT header");
+    }
 
-    // Track the actual charge amount
-    let chargedMicro = 0n;
-    const actuallyChargeMicro = (amountMicro: bigint) => {
-      chargedMicro = amountMicro > config.maxMicro ? config.maxMicro : amountMicro;
-    };
+    // Verify with facilitator
+    const verify = await postFacilitator("/verify", {
+      x402Version: X402_VERSION,
+      paymentPayload,
+      paymentRequirements: requirements,
+    });
+    if (!verify.ok || !verify.body?.isValid) {
+      return errorResponse(
+        401,
+        verify.body?.invalidReason ?? `Verify failed: ${verify.error}`,
+      );
+    }
 
-    // Run the actual handler
-    const result = await handler(event, actuallyChargeMicro);
+    // Run user handler
+    const result = await handler(event);
 
-    // TODO PHASE 2C: settle with facilitator for the actual amount
-    // const settleResponse = await fetch(`${FACILITATOR_BASE}/settle`, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({
-    //     payment: paymentHeader,
-    //     amount: chargedMicro.toString(),
-    //     recipient: config.recipient,
-    //     asset: USDC_BASE_SEPOLIA,
-    //     network: "base-sepolia",
-    //   }),
-    // });
-    // const settlement = await settleResponse.json();
+    // Settle (the actual on-chain transfer)
+    const settle = await postFacilitator("/settle", {
+      x402Version: X402_VERSION,
+      paymentPayload,
+      paymentRequirements: requirements,
+    });
 
-    // Stub settlement for 2b
-    const stubTxHash =
-      "0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`;
+    const settlementHeader = Buffer.from(
+      JSON.stringify({
+        success: settle.ok && settle.body?.success !== false,
+        transaction: settle.body?.transaction ?? null,
+        network: NETWORK,
+        payer: settle.body?.payer ?? null,
+      }),
+    ).toString("base64");
 
     return {
       statusCode: result.statusCode,
       headers: {
         "Content-Type": "application/json",
-        "X-PAYMENT-Settlement": stubTxHash,
-        "X-PAYMENT-Amount": chargedMicro.toString(),
+        "X-PAYMENT-RESPONSE": settlementHeader,
       },
-      body: JSON.stringify(result.body, (_key, value) =>
-        typeof value === "bigint" ? value.toString() : value,
+      body: JSON.stringify(result.body, (_k, v) =>
+        typeof v === "bigint" ? v.toString() : v,
       ),
     };
+  };
+}
+
+function paymentRequirementsFor(config: X402Config) {
+  return {
+    scheme: "exact",
+    network: NETWORK,
+    maxAmountRequired: config.amountMicro.toString(),
+    asset: USDC_BASE_SEPOLIA,
+    payTo: config.recipient,
+    description: config.description,
+    mimeType: "application/json",
+    maxTimeoutSeconds: 60,
+    resource: "agent",
+    extra: {
+      name: "USDC",
+      version: "2",
+    },
+  };
+}
+
+async function postFacilitator(
+  path: "/verify" | "/settle",
+  body: unknown,
+): Promise<{ ok: boolean; status: number; body: any; error?: string }> {
+  try {
+    const r = await fetch(`${FACILITATOR_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await r.text();
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { raw: text };
+    }
+    return { ok: r.ok, status: r.status, body: parsed };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      body: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function errorResponse(
+  status: number,
+  message: string,
+): APIGatewayProxyStructuredResultV2 {
+  return {
+    statusCode: status,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok: false, error: message }),
   };
 }
 
@@ -136,139 +195,181 @@ export function requirePayment(
 // Client side — payX402
 // ---------------------------------------------------------------------------
 
-export type PayX402Options = {
-  url: string; // target agent's API Gateway URL
-  payerPrivateKey: `0x${string}`; // private key for signing EIP-3009
-  body: unknown; // request body to send
-  maxMicro: bigint; // ceiling we authorize
+export type PayX402Options<T = unknown> = {
+  url: string;
+  payerPrivateKey: `0x${string}`;
+  body: unknown;
 };
 
-export type PayX402Success<T> = {
-  ok: true;
-  data: T;
-  settlement: X402Settlement;
-};
-
-export type PayX402Error = {
-  ok: false;
-  error: string;
-};
-
-export type PayX402Result<T> = PayX402Success<T> | PayX402Error;
+export type PayX402Result<T> =
+  | { ok: true; data: T; settlement: X402Settlement }
+  | { ok: false; error: string };
 
 /**
- * Client helper for calling an x402-gated endpoint.
- *
- * Flow:
- * 1. First call → expect 402, parse the price quote
- * 2. Sign EIP-3009 transferAuthorization for maxMicro to recipient
- * 3. Re-call with X-PAYMENT header
- * 4. Return the data + settlement
+ * Pay-and-call helper. Performs the canonical x402 retry dance:
+ * 1. POST → expect 402 with payment requirements
+ * 2. Sign EIP-3009 transferAuthorization for the required amount
+ * 3. Re-POST with X-PAYMENT header → server verifies + runs + settles
+ * 4. Parse settlement details from X-PAYMENT-RESPONSE header
  */
 export async function payX402<T>(
-  opts: PayX402Options,
+  opts: PayX402Options<T>,
 ): Promise<PayX402Result<T>> {
   try {
-    // Step 1: Initial call to get the 402 price quote
-    const initialResponse = await fetch(opts.url, {
+    // Step 1 — pre-flight to get requirements
+    const initial = await fetch(opts.url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(opts.body),
     });
 
-    if (initialResponse.status !== 402) {
-      // If not 402, maybe the endpoint doesn't require payment (shouldn't happen)
-      if (initialResponse.ok) {
-        const data = (await initialResponse.json()) as T;
-        return {
-          ok: true,
-          data,
-          settlement: {
-            txHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
-            paidMicro: 0n,
-            payer: "0x0000000000000000000000000000000000000000",
-          },
-        };
-      }
-      return { ok: false, error: `Unexpected status: ${initialResponse.status}` };
+    if (initial.status !== 402) {
+      return {
+        ok: false,
+        error: `Expected 402, got ${initial.status}: ${(await initial.text()).slice(0, 120)}`,
+      };
     }
 
-    // Parse the price quote from 402 response
-    const _quote = await initialResponse.json();
+    const challenge = (await initial.json()) as {
+      x402Version: number;
+      accepts: Array<{
+        scheme: string;
+        network: string;
+        maxAmountRequired: string;
+        asset: `0x${string}`;
+        payTo: `0x${string}`;
+        extra?: { name?: string; version?: string };
+      }>;
+    };
 
-    // TODO PHASE 2C: Sign EIP-3009 transferAuthorization using viem
-    // const walletClient = createWalletClient({
-    //   account: privateKeyToAccount(opts.payerPrivateKey),
-    //   chain: baseSepolia,
-    //   transport: http(),
-    // });
-    //
-    // const authorization = await walletClient.signTypedData({
-    //   domain: {
-    //     name: "USD Coin",
-    //     version: "2",
-    //     chainId: 84532n, // Base Sepolia
-    //     verifyingContract: USDC_BASE_SEPOLIA,
-    //   },
-    //   types: { TransferWithAuthorization: [...] },
-    //   primaryType: "TransferWithAuthorization",
-    //   message: {
-    //     from: walletClient.account.address,
-    //     to: quote.recipient,
-    //     value: opts.maxMicro,
-    //     validAfter: 0n,
-    //     validBefore: BigInt(Math.floor(Date.now() / 1000) + 3600),
-    //     nonce: randomBytes(32),
-    //   },
-    // });
+    const req = challenge.accepts?.find(
+      (r) => r.scheme === "exact" && r.network === NETWORK,
+    );
+    if (!req) {
+      return {
+        ok: false,
+        error: "Server doesn't accept exact / base-sepolia",
+      };
+    }
 
-    // Stub: create a fake payment header for 2b testing
-    const stubPaymentHeader = Buffer.from(
-      JSON.stringify({
-        stub: true,
-        maxMicro: opts.maxMicro.toString(),
-        payer: "0x0000000000000000000000000000000000000000",
-      }),
+    // Step 2 — sign EIP-3009 transferAuthorization
+    const account = privateKeyToAccount(opts.payerPrivateKey);
+    const validAfter = 0n;
+    const validBefore = BigInt(Math.floor(Date.now() / 1000) + 600); // 10-minute window
+    const nonce = randomNonce();
+
+    const signature = await account.signTypedData({
+      domain: {
+        name: req.extra?.name ?? "USDC",
+        version: req.extra?.version ?? "2",
+        chainId: baseSepolia.id,
+        verifyingContract: req.asset,
+      },
+      types: {
+        TransferWithAuthorization: [
+          { name: "from", type: "address" },
+          { name: "to", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+        ],
+      },
+      primaryType: "TransferWithAuthorization",
+      message: {
+        from: account.address,
+        to: req.payTo,
+        value: BigInt(req.maxAmountRequired),
+        validAfter,
+        validBefore,
+        nonce,
+      },
+    });
+
+    const paymentPayload = {
+      x402Version: X402_VERSION,
+      scheme: "exact",
+      network: NETWORK,
+      payload: {
+        signature,
+        authorization: {
+          from: account.address,
+          to: req.payTo,
+          value: req.maxAmountRequired,
+          validAfter: validAfter.toString(),
+          validBefore: validBefore.toString(),
+          nonce,
+        },
+      },
+    };
+
+    const xPaymentHeader = Buffer.from(
+      JSON.stringify(paymentPayload),
     ).toString("base64");
 
-    // Step 3: Re-call with payment header
-    const paidResponse = await fetch(opts.url, {
+    // Step 3 — re-call with payment
+    const paid = await fetch(opts.url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-PAYMENT": stubPaymentHeader,
+        "X-PAYMENT": xPaymentHeader,
       },
       body: JSON.stringify(opts.body),
     });
 
-    if (!paidResponse.ok) {
+    if (!paid.ok) {
+      const errorText = await paid.text();
       return {
         ok: false,
-        error: `Payment call failed: ${paidResponse.status}`,
+        error: `Paid call failed ${paid.status}: ${errorText.slice(0, 120)}`,
       };
     }
 
-    const responseBody = await paidResponse.json();
-    const settlementTxHash =
-      (paidResponse.headers.get("X-PAYMENT-Settlement") as `0x${string}`) ||
-      "0x0000000000000000000000000000000000000000000000000000000000000000";
-    const paidAmount = BigInt(
-      paidResponse.headers.get("X-PAYMENT-Amount") || "0",
-    );
+    const responseBody = (await paid.json()) as { ok?: boolean; data?: T } & T;
 
-    return {
-      ok: true,
-      data: (responseBody as { data?: T }).data ?? (responseBody as T),
-      settlement: {
-        txHash: settlementTxHash,
-        paidMicro: paidAmount,
-        payer: "0x0000000000000000000000000000000000000000" as `0x${string}`,
-      },
+    // Step 4 — parse settlement from response header
+    const settlementHeader = paid.headers.get("x-payment-response");
+    let settlement: X402Settlement = {
+      txHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+      paidMicro: BigInt(req.maxAmountRequired),
+      payer: account.address,
     };
+    if (settlementHeader) {
+      try {
+        const parsed = JSON.parse(
+          Buffer.from(settlementHeader, "base64").toString("utf8"),
+        );
+        if (parsed.transaction) {
+          settlement = {
+            txHash: parsed.transaction,
+            paidMicro: BigInt(req.maxAmountRequired),
+            payer: parsed.payer ?? account.address,
+          };
+        }
+      } catch {
+        // ignore — settlement still happened, just couldn't parse
+      }
+    }
+
+    const data =
+      "data" in (responseBody as object)
+        ? ((responseBody as { data: T }).data as T)
+        : (responseBody as T);
+
+    return { ok: true, data, settlement };
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Unknown error",
+      error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+function randomNonce(): `0x${string}` {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return ("0x" +
+    Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")) as `0x${string}`;
 }

@@ -1,7 +1,7 @@
 // Persistent top bar — shown on every authenticated screen.
 // Logo (PayMate, "Mate" colored) + role pill + wallet pill.
 
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { PaymateColors, Spacing, Radius, roleTheme } from "../../constants/theme";
 import { useRole } from "../lib/role";
@@ -19,11 +19,21 @@ export function TopBar() {
     <View style={styles.bar}>
       <Pressable
         style={styles.brand}
-        onPress={() => {
-          // Tap logo to switch role (demo convenience)
+        onPress={async () => {
+          // Clear state first (also wipes AsyncStorage so a fresh load
+          // won't auto-redirect back into a tab group).
           setRole(null);
-          disconnect();
-          router.replace("/");
+          await disconnect();
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            // Web: hard reload. Expo Router's "transparent" route groups
+            // make /(lp) and / share the same URL path on web, which causes
+            // router.replace to be a no-op when the URL is already at "/".
+            // A full reload bypasses this entirely.
+            window.location.href = "/";
+          } else {
+            // Native: router.replace works fine since there's no URL ambiguity.
+            router.replace("/");
+          }
         }}
       >
         <Text style={styles.brandText}>

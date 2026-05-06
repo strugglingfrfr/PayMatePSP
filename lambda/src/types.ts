@@ -1,20 +1,37 @@
 // Shared types across Lambda handlers.
 
+export type KybData = {
+  // Company (5)
+  companyName: string;
+  jurisdiction: string;
+  dateOfIncorporation: string;
+  yearsInOperation: number;
+  businessType: "RSP" | "PSP" | "OTC";
+
+  // Operations (4)
+  monthlyTransactionVolume: number;
+  primaryCorridor: string;
+  settlementPartners: string;
+  settlementCycle: "T+0" | "T+1" | "T+2";
+
+  // Financial (4)
+  annualRevenue: number;
+  netIncome: number;
+  totalEquity: number;
+  debtRatio: number;
+
+  // Compliance (3)
+  amlPolicyInPlace: boolean;
+  sanctionsScreeningProvider: string;
+  lastRegulatoryAuditDate: string;
+};
+
 export type KybStatus = "pending" | "scoring" | "approved" | "rejected" | "error";
 
 export type KybSubmission = {
   walletAddress: string;
   submittedAt: number; // unix ms
-  kybData: {
-    companyName: string;
-    jurisdiction: string;
-    yearsInOperation: number;
-    businessType: "RSP" | "PSP" | "OTC";
-    monthlyTransactionVolume: number;
-    annualRevenue: number;
-    amlPolicyInPlace: boolean;
-    primaryCorridor: string;
-  };
+  kybData: KybData;
   status: KybStatus;
   // Filled in by Phase 2c when Bedrock scoring is wired:
   kyrScore?: KyrScore;

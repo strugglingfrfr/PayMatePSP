@@ -21,28 +21,65 @@ import {
   BN,
   type Idl,
 } from "@coral-xyz/anchor";
-import {
-  TOKEN_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccountIdempotentInstruction,
-} from "@solana/spl-token";
 import { Platform } from "react-native";
 import idl from "../idl/paymate.json";
+
+// SPL Token program ID — hardcoded so we don't need @solana/spl-token at
+// module init (it transitively loads spl-token-metadata which uses Buffer
+// at init time and breaks web preview).
+const TOKEN_PROGRAM_ID = new PublicKey(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+);
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey(
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+);
+
+// Lazy ATA helpers — these only get called from within signAndSend paths,
+// which throw on web. So the dynamic import never runs on web.
+async function getAssociatedTokenAddress(
+  mint: PublicKey,
+  owner: PublicKey,
+): Promise<PublicKey> {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
+  return pda;
+}
+
+async function createAssociatedTokenAccountIdempotentInstruction(
+  payer: PublicKey,
+  ata: PublicKey,
+  owner: PublicKey,
+  mint: PublicKey,
+) {
+  // Lazy import — only loads on Android when on-chain ops actually run.
+  const spl = await import("@solana/spl-token");
+  return spl.createAssociatedTokenAccountIdempotentInstruction(
+    payer,
+    ata,
+    owner,
+    mint,
+  );
+}
 
 const RPC_URL = "https://api.devnet.solana.com";
 export const DEVNET = new Connection(RPC_URL, "confirmed");
 
 const PROGRAM_ID = new PublicKey((idl as { address: string }).address);
-const POOL_SEED = Buffer.from("pool");
-const VAULT_SEED = Buffer.from("vault");
-const LP_SEED = Buffer.from("lp");
-const PSP_SEED = Buffer.from("psp");
+// Use TextEncoder to avoid relying on Buffer at module init (web compatibility).
+// PublicKey.findProgramAddressSync accepts Uint8Array seeds directly.
+const _enc = new TextEncoder();
+const POOL_SEED = _enc.encode("pool");
+const VAULT_SEED = _enc.encode("vault");
+const LP_SEED = _enc.encode("lp");
+const PSP_SEED = _enc.encode("psp");
 
-// Mock USDC mint on devnet (created in lambda/infra/create-mock-usdc.ts).
-// Hardcoded for the demo. For prod swap to Circle's mainnet USDC.
+// Circle's official Solana devnet USDC mint. Same logo + UI as mainnet
+// USDC in Phantom / Solflare / Coinbase Wallet. Faucet at faucet.circle.com.
+// Mainnet swap: change to EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v.
 export const USDC_MINT = new PublicKey(
-  "Et1L9zCEd8Z4ZX1BJow8Q2DLVz5d7b6jXZid76fWfnQZ",
+  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 );
 
 // ---- PDAs -------------------------------------------------------------------
@@ -159,7 +196,7 @@ type TransactResult = { signature: string };
  */
 async function signAndSend(
   payer: PublicKey,
-  ixs: Awaited<ReturnType<Program["methods"]["deposit"]>>[],
+  ixs: any[],
 ): Promise<TransactResult> {
   if (Platform.OS !== "android") {
     throw new Error(
@@ -216,7 +253,7 @@ export async function depositUsdc(args: {
   const lpAccount = findLpAccountPda(owner);
 
   // Belt-and-suspenders: ensure LP's USDC ATA exists. Idempotent.
-  const ataIx = createAssociatedTokenAccountIdempotentInstruction(
+  const ataIx = await createAssociatedTokenAccountIdempotentInstruction(
     owner,
     lpAta,
     owner,
@@ -275,7 +312,7 @@ export async function requestDrawdown(args: {
   const pspAta = await getAssociatedTokenAddress(USDC_MINT, owner);
   const pspAccount = findPspAccountPda(owner);
 
-  const ataIx = createAssociatedTokenAccountIdempotentInstruction(
+  const ataIx = await createAssociatedTokenAccountIdempotentInstruction(
     owner,
     pspAta,
     owner,

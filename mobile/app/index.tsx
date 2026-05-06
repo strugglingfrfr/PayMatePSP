@@ -1,7 +1,4 @@
 // Splash / role select / wallet connect.
-//
-// Three-step flow on a single screen: pick role → connect wallet → land in
-// the role's tab group. Mirrors v1's landing copy ("Instant Capital… / Fixed Yield…").
 
 import { useEffect, useState } from "react";
 import {
@@ -14,54 +11,58 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useRootNavigationState } from "expo-router";
 import {
   PaymateColors,
   Spacing,
   Radius,
-  roleTheme,
   type Role,
 } from "../constants/theme";
 import { useRole } from "../src/lib/role";
 import { useWallet } from "../src/lib/wallet";
 import { api, type PoolState } from "../src/lib/api";
 
+const ACCENT = PaymateColors.brandAccent;
+
 export default function Splash() {
   const router = useRouter();
+  const navState = useRootNavigationState();
+  const navReady = !!navState?.key;
   const { role, setRole, loaded } = useRole();
   const { publicKey, connect, connectMock } = useWallet();
   const [mockInput, setMockInput] = useState("");
-  const [showMock, setShowMock] = useState(false);
   const [pool, setPool] = useState<PoolState | null>(null);
   const [connecting, setConnecting] = useState(false);
 
-  // Fetch pool state for the marquee
   useEffect(() => {
     api.poolState().then((r) => {
       if (r.ok) setPool(r.data);
     });
   }, []);
 
-  // Auto-route once both role + wallet are set
+  // Auto-redirect once role + wallet are both set. Logo tap clears them
+  // (handled in TopBar with a hard reload on web), so this only fires
+  // when the user has actively connected.
   useEffect(() => {
+    if (!navReady) return;
     if (!loaded || !role || !publicKey) return;
     if (role === "LP") router.replace("/(lp)");
     if (role === "PSP") router.replace("/(psp)");
     if (role === "ADMIN") router.replace("/(admin)");
-  }, [role, publicKey, loaded, router]);
+  }, [role, publicKey, loaded, router, navReady]);
 
   const handleConnect = async () => {
     setConnecting(true);
     try {
       await connect();
     } catch (err) {
-      Alert.alert(
-        "Wallet not available",
-        Platform.OS !== "android"
-          ? "MWA only works on Android. Use the dev mock below."
-          : err instanceof Error ? err.message : "connect failed",
-      );
-      setShowMock(true);
+      // On non-Android, MWA throws — fall back silently to the inline mock input.
+      if (Platform.OS === "android") {
+        Alert.alert(
+          "Wallet error",
+          err instanceof Error ? err.message : "connect failed",
+        );
+      }
     } finally {
       setConnecting(false);
     }
@@ -74,63 +75,62 @@ export default function Splash() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <View style={styles.brandRow}>
-        <Text style={styles.brand}>
-          Pay<Text style={{ color: PaymateColors.brandAccent }}>Mate</Text>
-        </Text>
-      </View>
+      <Text style={styles.brand}>
+        Pay<Text style={{ color: ACCENT }}>Mate</Text>
+      </Text>
 
       <Text style={styles.hero}>Instant Capital for{"\n"}Payment Service Providers.</Text>
-      <Text style={[styles.hero, { color: PaymateColors.brandAccent }]}>
-        Fixed Yield for{"\n"}Investors.
+      <Text style={[styles.hero, { color: ACCENT }]}>
+        Stable Yield for{"\n"}LPs.
       </Text>
       <Text style={styles.subtitle}>
-        On-chain credit pool on Solana. AI-priced risk via AWS Bedrock. PSPs
-        draw USDC, investors earn 5% APY, all automated.
+        On-chain settlement-credit infrastructure on Solana. AI-vetted by AWS
+        Bedrock. Real-world yield from licensed payment operators.
       </Text>
 
-      {/* Pool Status card — always visible */}
+      {/* Pool status card */}
       <View style={styles.poolCard}>
         <Text style={styles.poolHeader}>Pool Status</Text>
-        <PoolRow label="Total Liquidity" value={fmtUsdc(pool?.totalLiquidity)} />
-        <PoolRow label="Available" value={fmtUsdc(pool?.availableLiquidity)} />
-        <PoolRow label="Drawdown Limit" value={fmtUsdc(pool?.drawdownLimit)} />
+        <PoolRow label="Total Liquidity" value={fmtUsdcRow(pool?.totalLiquidity)} />
+        <PoolRow label="Available" value={fmtUsdcRow(pool?.availableLiquidity)} />
+        <PoolRow label="Drawdown Limit" value={fmtUsdcRow(pool?.drawdownLimit)} />
         <PoolRow label="LP APY" value={pool ? `${pool.lpApyBps / 100}%` : "—"} />
       </View>
 
       {/* Role select */}
       {!role && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Who are you?</Text>
-          <RoleButton role="LP" onPress={() => setRole("LP")} />
-          <RoleButton role="PSP" onPress={() => setRole("PSP")} />
-          <RoleButton role="ADMIN" onPress={() => setRole("ADMIN")} />
+          <Text style={styles.sectionTitle}>Continue as</Text>
+          <RoleButton label="LP" onPress={() => setRole("LP")} />
+          <RoleButton label="PSP" onPress={() => setRole("PSP")} />
+          <RoleButton label="Admin" onPress={() => setRole("ADMIN")} />
         </View>
       )}
 
-      {/* Wallet connect (after role picked) */}
+      {/* Wallet connect */}
       {role && !publicKey && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Connect your Solana wallet ({roleTheme(role).label})
+          <Text style={styles.sectionTitle}>Connect Wallet</Text>
+          <Text style={styles.sectionHint}>
+            Phantom, Solflare, or Coinbase Wallet via Mobile Wallet Adapter.
           </Text>
+
           <Pressable
-            style={[styles.connectBtn, { backgroundColor: roleTheme(role).accent }]}
+            style={[styles.connectBtn, connecting && { opacity: 0.5 }]}
             onPress={handleConnect}
             disabled={connecting}
           >
             <Text style={styles.connectBtnText}>
-              {connecting ? "Connecting…" : "Connect Wallet (MWA)"}
+              {connecting ? "Opening wallet…" : "Open Wallet"}
             </Text>
           </Pressable>
 
-          <Pressable onPress={() => setRole(null)} style={styles.linkBtn}>
-            <Text style={styles.linkText}>← Pick a different role</Text>
-          </Pressable>
-
-          {showMock && (
+          {/* Inline dev fallback — visible on web/iOS where MWA isn't available */}
+          {Platform.OS !== "android" && (
             <View style={styles.mockBox}>
-              <Text style={styles.mockTitle}>Dev mock (paste pubkey)</Text>
+              <Text style={styles.mockHint}>
+                Wallet not available. Paste a public key to preview.
+              </Text>
               <TextInput
                 value={mockInput}
                 onChangeText={setMockInput}
@@ -142,20 +142,17 @@ export default function Splash() {
               />
               <Pressable
                 onPress={handleMock}
-                style={[styles.mockBtn, { borderColor: roleTheme(role).accent }]}
+                style={[styles.mockBtn, !mockInput.trim() && { opacity: 0.4 }]}
+                disabled={!mockInput.trim()}
               >
-                <Text style={[styles.mockBtnText, { color: roleTheme(role).accent }]}>
-                  Use mock wallet
-                </Text>
+                <Text style={styles.mockBtnText}>Preview →</Text>
               </Pressable>
             </View>
           )}
 
-          {!showMock && Platform.OS !== "android" && (
-            <Pressable onPress={() => setShowMock(true)} style={styles.linkBtn}>
-              <Text style={styles.linkText}>Use a dev mock instead</Text>
-            </Pressable>
-          )}
+          <Pressable onPress={() => setRole(null)} style={styles.linkBtn}>
+            <Text style={styles.linkText}>← Back</Text>
+          </Pressable>
         </View>
       )}
     </ScrollView>
@@ -171,35 +168,45 @@ function PoolRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RoleButton({ role, onPress }: { role: Role; onPress: () => void }) {
-  const theme = roleTheme(role);
+function RoleButton({
+  label,
+  onPress,
+}: {
+  label: string;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.roleBtn, { borderColor: theme.accent }]}
+      style={({ pressed }) => [
+        styles.roleBtn,
+        pressed && { backgroundColor: "rgba(96,165,250,0.08)" },
+      ]}
     >
-      <View style={[styles.roleDot, { backgroundColor: theme.accent }]} />
-      <Text style={[styles.roleBtnText, { color: theme.accent }]}>
-        I'm {theme.label === "Admin" ? "an" : "a" + (theme.label === "Investor" ? "n" : "")} {theme.label}
-      </Text>
+      <Text style={styles.roleBtnText}>{label}</Text>
+      <Text style={styles.roleBtnArrow}>→</Text>
     </Pressable>
   );
 }
 
-function fmtUsdc(microAmount: number | undefined): string {
+function fmtUsdcRow(microAmount: number | undefined): string {
   if (microAmount === undefined) return "—";
   return `$${(microAmount / 1e6).toFixed(2)} USDC`;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: PaymateColors.bg },
-  content: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.xxl, paddingBottom: 60 },
-  brandRow: { marginBottom: Spacing.xl },
+  content: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xxl,
+    paddingBottom: 60,
+  },
   brand: {
     color: PaymateColors.textPrimary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "800",
     letterSpacing: -0.5,
+    marginBottom: Spacing.xl,
   },
   hero: {
     color: PaymateColors.textPrimary,
@@ -216,6 +223,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     marginBottom: Spacing.xl,
   },
+
+  // Pool status card
   poolCard: {
     borderWidth: 1,
     borderColor: PaymateColors.border,
@@ -243,28 +252,47 @@ const styles = StyleSheet.create({
     fontFamily: "monospace",
     fontSize: 13,
   },
+
   section: { marginTop: Spacing.lg },
   sectionTitle: {
     color: PaymateColors.textSecondary,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: "600",
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: Spacing.md,
   },
+  sectionHint: {
+    color: PaymateColors.textMuted,
+    fontSize: 12,
+    marginBottom: Spacing.lg,
+  },
+
+  // Role buttons — single accent color (brand blue), no role tinting
   roleBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
+    justifyContent: "space-between",
     borderWidth: 1,
+    borderColor: ACCENT,
     borderRadius: Radius.lg,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
   },
-  roleDot: { width: 8, height: 8, borderRadius: 4 },
-  roleBtnText: { fontSize: 16, fontWeight: "600" },
+  roleBtnText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: ACCENT,
+  },
+  roleBtnArrow: {
+    fontSize: 18,
+    color: ACCENT,
+  },
+
+  // Connect button
   connectBtn: {
+    backgroundColor: ACCENT,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.xl,
     borderRadius: Radius.lg,
@@ -275,8 +303,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
-  linkBtn: { paddingVertical: Spacing.md, alignItems: "center" },
-  linkText: { color: PaymateColors.textSecondary, fontSize: 13 },
+
+  // Inline dev mock — neutral grays, no role tint
   mockBox: {
     marginTop: Spacing.lg,
     padding: Spacing.lg,
@@ -285,18 +313,17 @@ const styles = StyleSheet.create({
     borderColor: PaymateColors.border,
     backgroundColor: PaymateColors.bgCard,
   },
-  mockTitle: {
-    color: PaymateColors.textSecondary,
+  mockHint: {
+    color: PaymateColors.textMuted,
     fontSize: 12,
-    marginBottom: Spacing.sm,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    marginBottom: Spacing.md,
   },
   mockInput: {
     borderWidth: 1,
     borderColor: PaymateColors.border,
     borderRadius: Radius.md,
-    padding: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     color: PaymateColors.textPrimary,
     fontFamily: "monospace",
     fontSize: 12,
@@ -305,8 +332,16 @@ const styles = StyleSheet.create({
   mockBtn: {
     paddingVertical: Spacing.md,
     borderWidth: 1,
-    borderRadius: Radius.lg,
+    borderColor: PaymateColors.border,
+    borderRadius: Radius.md,
     alignItems: "center",
   },
-  mockBtnText: { fontSize: 14, fontWeight: "600" },
+  mockBtnText: {
+    color: PaymateColors.textSecondary,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+
+  linkBtn: { paddingVertical: Spacing.lg, alignItems: "center" },
+  linkText: { color: PaymateColors.textMuted, fontSize: 13 },
 });

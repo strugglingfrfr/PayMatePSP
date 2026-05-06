@@ -25,8 +25,8 @@ import {
   depositUsdc,
   fetchLpAccount,
   projectedYield,
-  LP_APY_BPS,
 } from "../../src/lib/onchain";
+import { api, type PoolState } from "../../src/lib/api";
 
 const accent = roleTheme("LP").accent;
 
@@ -35,13 +35,19 @@ export default function LpDeposit() {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [lp, setLp] = useState<{ depositedAmount: number; lastDepositTs: number } | null>(null);
+  const [pool, setPool] = useState<PoolState | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!publicKey) return;
     try {
       const owner = new PublicKey(publicKey);
-      setLp(await fetchLpAccount(owner));
+      const [lpAcc, poolRes] = await Promise.all([
+        fetchLpAccount(owner),
+        api.poolState(),
+      ]);
+      setLp(lpAcc);
+      setPool(poolRes.ok ? poolRes.data : null);
     } catch {
       setLp(null);
     }
@@ -53,7 +59,12 @@ export default function LpDeposit() {
 
   const principal = lp?.depositedAmount ?? 0;
   const yieldNow = lp ? projectedYield(principal, lp.lastDepositTs) : 0;
-  const annual = (LP_APY_BPS / 100).toFixed(0);
+  const utilization =
+    pool && pool.totalLiquidity > 0
+      ? Math.round(
+          ((pool.totalLiquidity - pool.availableLiquidity) / pool.totalLiquidity) * 100,
+        )
+      : 0;
 
   const handleDeposit = async () => {
     if (!publicKey) return;
@@ -108,18 +119,25 @@ export default function LpDeposit() {
         />
       </View>
       <View style={[styles.statsRow, { marginTop: Spacing.md }]}>
-        <StatCard label="Fixed APY" value={`${annual}%`} unit="guaranteed" accent={accent} />
         <StatCard
-          label="Status"
-          value={principal > 0 ? "Active" : "—"}
-          unit={principal > 0 ? "earning" : "no deposit"}
+          label="Pool Available"
+          value={pool ? `$${(pool.availableLiquidity / 1e6).toFixed(2)}` : "—"}
+          unit="USDC"
+        />
+        <StatCard
+          label="Utilization"
+          value={pool ? `${utilization}%` : "—"}
+          unit={
+            !pool ? "—" : utilization < 50 ? "healthy" : utilization < 80 ? "moderate" : "high"
+          }
+          accent={accent}
         />
       </View>
 
       <View style={styles.formCard}>
         <Text style={styles.formTitle}>Deposit USDC</Text>
         <Text style={styles.formSubtitle}>
-          Earn 5% fixed APY paid from PSP fees.
+          Earn yield paid from PSP repayment fees.
         </Text>
 
         <Text style={styles.inputLabel}>Amount (USDC)</Text>
@@ -163,10 +181,11 @@ export default function LpDeposit() {
       )}
 
       <View style={styles.infoCard}>
-        <Text style={styles.infoTitle}>Fixed & Guaranteed</Text>
+        <Text style={styles.infoTitle}>How you earn</Text>
         <Text style={styles.infoBody}>
-          Your 5% APY is fixed regardless of pool utilization. Yield is paid
-          from the Yield Reserve funded by PSP fees, capped by what's collected.
+          Real-world yield. Licensed payment operators prefund settlement
+          with your USDC. You earn from short-duration payment flows. Not
+          farming, not staking.
         </Text>
       </View>
     </ScrollView>

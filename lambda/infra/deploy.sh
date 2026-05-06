@@ -113,7 +113,7 @@ echo "  ✓ admin keypair encoded (base58, $(echo -n "$ADMIN_PK" | wc -c | tr -d
 # Risk agent URL — same API Gateway, /agent/risk path
 RISK_AGENT_URL_VAL="https://${API_ID:-wdex0emoga}.execute-api.${REGION}.amazonaws.com/agent/risk"
 
-ENV_VARS="Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h,SOLANA_ADMIN_PRIVATE_KEY=$ADMIN_PK,RISK_AGENT_URL=$RISK_AGENT_URL_VAL}"
+ENV_VARS="Variables={SOLANA_RPC_URL=https://api.devnet.solana.com,PROGRAM_ID=5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg,SOLANA_ADMIN_PRIVATE_KEY=$ADMIN_PK,RISK_AGENT_URL=$RISK_AGENT_URL_VAL}"
 
 echo ""
 echo "→ Lambda function"

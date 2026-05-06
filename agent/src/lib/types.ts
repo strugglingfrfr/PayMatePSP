@@ -1,12 +1,27 @@
 export type KybData = {
+  // Company (5)
   companyName: string;
-  jurisdiction: string; // ISO-3166 alpha-2, e.g. "NG", "GB"
+  jurisdiction: string;              // ISO-3166 alpha-2, e.g. "NG", "GB"
+  dateOfIncorporation: string;       // YYYY-MM-DD
   yearsInOperation: number;
   businessType: "RSP" | "PSP" | "OTC";
-  monthlyTransactionVolume: number; // USD
-  annualRevenue: number; // USD
+
+  // Operations (4)
+  monthlyTransactionVolume: number;  // USD
+  primaryCorridor: string;           // e.g. "NG-GB"
+  settlementPartners: string;        // comma-separated for hackathon simplicity
+  settlementCycle: "T+0" | "T+1" | "T+2";
+
+  // Financial (4)
+  annualRevenue: number;             // USD
+  netIncome: number;                 // USD
+  totalEquity: number;               // USD
+  debtRatio: number;                 // 0..1+ ratio
+
+  // Compliance (3)
   amlPolicyInPlace: boolean;
-  primaryCorridor: string; // e.g. "NG-GB"
+  sanctionsScreeningProvider: string;
+  lastRegulatoryAuditDate: string;   // YYYY-MM-DD
 };
 
 export type KyrCriterion =

@@ -17,7 +17,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
-declare_id!("6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h");
+declare_id!("5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg");
 
 // ===== Constants =====
 

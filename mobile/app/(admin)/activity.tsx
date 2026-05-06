@@ -22,8 +22,8 @@ const events: Array<{
   {
     badge: "PR",
     title: "Pool Program",
-    body: "Deployed at 6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h on Solana devnet. Anchor 1.0.2.",
-    link: "https://solscan.io/account/6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h?cluster=devnet",
+    body: "Deployed at 5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg on Solana devnet. Anchor 1.0.2.",
+    link: "https://solscan.io/account/5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg?cluster=devnet",
   },
   {
     badge: "AI",
@@ -45,7 +45,7 @@ const events: Array<{
   {
     badge: "DB",
     title: "DynamoDB",
-    body: "Three tables — Users, KybSubmissions, AgentCallLog. PAY_PER_REQUEST mode.",
+    body: "Three tables: Users, KybSubmissions, AgentCallLog. PAY_PER_REQUEST mode.",
   },
 ];
 

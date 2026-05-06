@@ -32,7 +32,7 @@ export default function LpPool() {
     return (
       <View style={styles.loading}>
         <Text style={styles.muted}>
-          {refreshing ? "Loading pool…" : "Pool not initialized — admin needs to call /admin/init-pool."}
+          {refreshing ? "Loading pool…" : "Pool not initialized. Admin needs to call /admin/init-pool."}
         </Text>
       </View>
     );
@@ -75,29 +75,11 @@ export default function LpPool() {
         />
       </View>
 
-      <View style={styles.row}>
-        <Text style={styles.label}>Drawdown limit</Text>
-        <Text style={styles.value}>${(pool.drawdownLimit / 1e6).toFixed(0)} USDC</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>LP APY</Text>
-        <Text style={styles.value}>{pool.lpApyBps / 100}%</Text>
-      </View>
-      <View style={styles.row}>
-        <Text style={styles.label}>Default PSP rate</Text>
-        <Text style={styles.value}>{(pool.defaultPspRateBps / 100).toFixed(2)}%/day</Text>
-      </View>
-
-      <View style={styles.refRow}>
-        <Text style={styles.refLabel}>Program ID</Text>
-        <Text style={styles.refValue} numberOfLines={1}>
-          {pool.programId}
-        </Text>
-      </View>
-      <View style={styles.refRow}>
-        <Text style={styles.refLabel}>Pool PDA</Text>
-        <Text style={styles.refValue} numberOfLines={1}>
-          {pool.poolPda}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>Where the yield comes from</Text>
+        <Text style={styles.infoBody}>
+          Real-world cash flows. Licensed payment operators draw to prefund
+          settlement. Their fee revenue backs the yield you earn.
         </Text>
       </View>
     </ScrollView>
@@ -110,37 +92,25 @@ const styles = StyleSheet.create({
   loading: { flex: 1, justifyContent: "center", alignItems: "center", padding: Spacing.xl },
   muted: { color: PaymateColors.textMuted, textAlign: "center", lineHeight: 22 },
   statsRow: { flexDirection: "row", gap: Spacing.md },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: PaymateColors.border,
-  },
-  label: { color: PaymateColors.textMuted, fontSize: 13 },
-  value: {
-    color: PaymateColors.textPrimary,
-    fontFamily: "monospace",
-    fontSize: 13,
-  },
-  refRow: {
-    marginTop: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: PaymateColors.bgCard,
+  infoCard: {
+    marginTop: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: PaymateColors.border,
+    backgroundColor: PaymateColors.bgCard,
   },
-  refLabel: {
-    color: PaymateColors.textMuted,
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  refValue: {
+  infoTitle: {
     color: PaymateColors.textSecondary,
     fontSize: 11,
-    fontFamily: "monospace",
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: Spacing.sm,
+  },
+  infoBody: {
+    color: PaymateColors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

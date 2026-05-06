@@ -36,14 +36,30 @@ Not performed (low-volume profile, sub-$1M monthly, low-risk corridor — cost-o
 Analyze the KYB submission below and return a strict-JSON KYR assessment.
 
 ## KYB Submission
+
+### Company
 - Company name: ${kyb.companyName}
 - Jurisdiction: ${kyb.jurisdiction}
+- Date of incorporation: ${kyb.dateOfIncorporation}
 - Years in operation: ${kyb.yearsInOperation}
 - Business type: ${kyb.businessType}
+
+### Operations
 - Monthly transaction volume: $${kyb.monthlyTransactionVolume.toLocaleString()} USD
-- Annual revenue: $${kyb.annualRevenue.toLocaleString()} USD
-- AML policy in place: ${kyb.amlPolicyInPlace}
 - Primary corridor: ${kyb.primaryCorridor}
+- Settlement partners: ${kyb.settlementPartners}
+- Settlement cycle: ${kyb.settlementCycle}
+
+### Financial
+- Annual revenue: $${kyb.annualRevenue.toLocaleString()} USD
+- Net income: $${kyb.netIncome.toLocaleString()} USD
+- Total equity: $${kyb.totalEquity.toLocaleString()} USD
+- Debt ratio: ${kyb.debtRatio}
+
+### Compliance
+- AML policy in place: ${kyb.amlPolicyInPlace}
+- Sanctions screening provider: ${kyb.sanctionsScreeningProvider}
+- Last regulatory audit date: ${kyb.lastRegulatoryAuditDate}
 ${complianceSection}
 ## Scoring Rubric (each criterion graded out of its max; total = 100)
 

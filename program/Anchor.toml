@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-program = "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h"
+program = "5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg"
 
 [programs.devnet]
-program = "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h"
+program = "5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg"
 
 [provider]
 cluster = "localnet"

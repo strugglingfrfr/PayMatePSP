@@ -53,7 +53,7 @@ export function roleTheme(role: Role): {
         accentDim: "rgba(34,197,94,0.20)",
         pillBg: "rgba(34,197,94,0.15)",
         pillText: PaymateColors.lp,
-        label: "Investor",
+        label: "LP",
       };
     case "PSP":
       return {

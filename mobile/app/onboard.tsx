@@ -1,12 +1,10 @@
-// PSP — KYB onboarding form.
+// PSP — KYB onboarding form. 4-step wizard matching v1's UX:
+// Company → Operations → Financial → Compliance → Submit.
 //
-// Single-screen 8-field form. v1's web app split this across 7 steps;
-// for mobile + speed we condensed to one scroll. Backend still ingests
-// the same fields.
-//
-// On submit: hits /kyb/submit (which fans out to the x402 risk agent +
-// Bedrock + maybe compliance). Shows a loading screen, then displays the
-// KYR result with reasoning. Then PSP waits for admin approval.
+// Top stepper shows progress (1 ✓ 2 ✓ 3 ● 4). Back / Continue at bottom.
+// On final submit: hits /kyb/submit (which fans out to the x402 risk agent
+// + Bedrock + maybe compliance). Loading screen, then KYR result with
+// reasoning. PSP then waits for admin approval.
 
 import { useState } from "react";
 import {
@@ -34,26 +32,52 @@ import { api, type KybData, type KyrScore } from "../src/lib/api";
 const accent = roleTheme("PSP").accent;
 
 type FormState = {
+  // Company
   companyName: string;
   jurisdiction: string;
+  dateOfIncorporation: string;
   yearsInOperation: string;
   businessType: KybData["businessType"];
+
+  // Operations
   monthlyTransactionVolume: string;
-  annualRevenue: string;
-  amlPolicyInPlace: boolean;
   primaryCorridor: string;
+  settlementPartners: string;
+  settlementCycle: KybData["settlementCycle"];
+
+  // Financial
+  annualRevenue: string;
+  netIncome: string;
+  totalEquity: string;
+  debtRatio: string;
+
+  // Compliance
+  amlPolicyInPlace: boolean;
+  sanctionsScreeningProvider: string;
+  lastRegulatoryAuditDate: string;
 };
 
 const initial: FormState = {
   companyName: "",
   jurisdiction: "",
+  dateOfIncorporation: "",
   yearsInOperation: "",
   businessType: "PSP",
   monthlyTransactionVolume: "",
-  annualRevenue: "",
-  amlPolicyInPlace: true,
   primaryCorridor: "",
+  settlementPartners: "",
+  settlementCycle: "T+1",
+  annualRevenue: "",
+  netIncome: "",
+  totalEquity: "",
+  debtRatio: "",
+  amlPolicyInPlace: true,
+  sanctionsScreeningProvider: "",
+  lastRegulatoryAuditDate: "",
 };
+
+type Step = 0 | 1 | 2 | 3;
+const stepLabels = ["Company", "Operations", "Financial", "Compliance"];
 
 type ResultState =
   | { kind: "form" }
@@ -65,38 +89,65 @@ export default function Onboard() {
   const router = useRouter();
   const { publicKey } = useWallet();
   const [form, setForm] = useState<FormState>(initial);
+  const [step, setStep] = useState<Step>(0);
   const [result, setResult] = useState<ResultState>({ kind: "form" });
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((s) => ({ ...s, [k]: v }));
 
-  const valid =
-    form.companyName.trim() !== "" &&
-    form.jurisdiction.trim() !== "" &&
-    form.yearsInOperation.trim() !== "" &&
-    form.monthlyTransactionVolume.trim() !== "" &&
-    form.annualRevenue.trim() !== "" &&
-    form.primaryCorridor.trim() !== "";
+  // Per-step validity. Returns true if user can advance from `step`.
+  const stepValid = (s: Step): boolean => {
+    if (s === 0)
+      return (
+        !!form.companyName.trim() &&
+        !!form.jurisdiction.trim() &&
+        !!form.dateOfIncorporation.trim() &&
+        !!form.yearsInOperation.trim()
+      );
+    if (s === 1)
+      return (
+        !!form.monthlyTransactionVolume.trim() &&
+        !!form.primaryCorridor.trim() &&
+        !!form.settlementPartners.trim()
+      );
+    if (s === 2)
+      return (
+        !!form.annualRevenue.trim() &&
+        !!form.netIncome.trim() &&
+        !!form.totalEquity.trim() &&
+        !!form.debtRatio.trim()
+      );
+    if (s === 3)
+      return (
+        !!form.sanctionsScreeningProvider.trim() &&
+        !!form.lastRegulatoryAuditDate.trim()
+      );
+    return false;
+  };
 
   const handleSubmit = async () => {
     if (!publicKey) {
       Alert.alert("Wallet required", "Connect your wallet first.");
       return;
     }
-    if (!valid) {
-      Alert.alert("Incomplete", "Please fill all required fields.");
-      return;
-    }
     setResult({ kind: "scoring" });
     const kybData: KybData = {
       companyName: form.companyName,
       jurisdiction: form.jurisdiction.toUpperCase(),
+      dateOfIncorporation: form.dateOfIncorporation,
       yearsInOperation: parseInt(form.yearsInOperation, 10),
       businessType: form.businessType,
       monthlyTransactionVolume: Math.floor(parseFloat(form.monthlyTransactionVolume)),
-      annualRevenue: Math.floor(parseFloat(form.annualRevenue)),
-      amlPolicyInPlace: form.amlPolicyInPlace,
       primaryCorridor: form.primaryCorridor,
+      settlementPartners: form.settlementPartners,
+      settlementCycle: form.settlementCycle,
+      annualRevenue: Math.floor(parseFloat(form.annualRevenue)),
+      netIncome: Math.floor(parseFloat(form.netIncome)),
+      totalEquity: Math.floor(parseFloat(form.totalEquity)),
+      debtRatio: parseFloat(form.debtRatio),
+      amlPolicyInPlace: form.amlPolicyInPlace,
+      sanctionsScreeningProvider: form.sanctionsScreeningProvider,
+      lastRegulatoryAuditDate: form.lastRegulatoryAuditDate,
     };
     const r = await api.kybSubmit(publicKey, kybData);
     if (!r.ok) {
@@ -106,10 +157,7 @@ export default function Onboard() {
     if (r.data.kyrScore) {
       setResult({ kind: "scored", kyr: r.data.kyrScore, decision: r.data.decision });
     } else {
-      setResult({
-        kind: "error",
-        error: "Risk agent did not return a score. Try again.",
-      });
+      setResult({ kind: "error", error: "Risk agent did not return a score. Try again." });
     }
   };
 
@@ -124,7 +172,47 @@ export default function Onboard() {
         </View>
 
         {result.kind === "form" && (
-          <FormBody form={form} update={update} valid={valid} onSubmit={handleSubmit} />
+          <>
+            <Text style={styles.title}>KYB Application</Text>
+            <Text style={styles.subtitle}>
+              16 fields across 4 sections. AI underwrites in seconds. Admin
+              approves and your credit terms go on-chain.
+            </Text>
+
+            <Stepper step={step} />
+
+            {step === 0 && <CompanyStep form={form} update={update} />}
+            {step === 1 && <OperationsStep form={form} update={update} />}
+            {step === 2 && <FinancialStep form={form} update={update} />}
+            {step === 3 && <ComplianceStep form={form} update={update} />}
+
+            <View style={styles.navRow}>
+              {step > 0 ? (
+                <OutlineButton
+                  label="← Back"
+                  onPress={() => setStep((s) => (s - 1) as Step)}
+                  accent={accent}
+                />
+              ) : (
+                <View />
+              )}
+              {step < 3 ? (
+                <PrimaryButton
+                  label="Continue →"
+                  onPress={() => setStep((s) => (s + 1) as Step)}
+                  disabled={!stepValid(step)}
+                  accent={accent}
+                />
+              ) : (
+                <PrimaryButton
+                  label="Submit for AI Underwriting"
+                  onPress={handleSubmit}
+                  disabled={!stepValid(0) || !stepValid(1) || !stepValid(2) || !stepValid(3)}
+                  accent={accent}
+                />
+              )}
+            </View>
+          </>
         )}
 
         {result.kind === "scoring" && (
@@ -167,104 +255,214 @@ export default function Onboard() {
   );
 }
 
-function FormBody({
+// ============================================================================
+// Steps
+// ============================================================================
+
+function CompanyStep({
   form,
   update,
-  valid,
-  onSubmit,
 }: {
   form: FormState;
   update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
-  valid: boolean;
-  onSubmit: () => void;
 }) {
   return (
-    <>
-      <Text style={styles.title}>KYB Application</Text>
-      <Text style={styles.subtitle}>
-        8 fields. AI underwrites in ~3 seconds. Admin approves and your credit
-        terms go on-chain.
-      </Text>
+    <Section title="Company">
+      <Field
+        label="Company name"
+        value={form.companyName}
+        onChange={(v) => update("companyName", v)}
+        placeholder="e.g. AfricaPay Ltd"
+      />
+      <Field
+        label="Jurisdiction (ISO-2)"
+        value={form.jurisdiction}
+        onChange={(v) => update("jurisdiction", v)}
+        placeholder="NG, GB, US…"
+        autoCapitalize="characters"
+        maxLength={2}
+      />
+      <Field
+        label="Date of incorporation"
+        value={form.dateOfIncorporation}
+        onChange={(v) => update("dateOfIncorporation", v)}
+        placeholder="YYYY-MM-DD"
+      />
+      <Field
+        label="Years in operation"
+        value={form.yearsInOperation}
+        onChange={(v) => update("yearsInOperation", v)}
+        placeholder="e.g. 4"
+        keyboardType="number-pad"
+      />
+      <Text style={styles.fieldLabel}>Business type</Text>
+      <Segmented
+        options={["RSP", "PSP", "OTC"]}
+        value={form.businessType}
+        onChange={(v) => update("businessType", v as KybData["businessType"])}
+      />
+    </Section>
+  );
+}
 
-      <Section title="Company">
-        <Field
-          label="Company name"
-          value={form.companyName}
-          onChange={(v) => update("companyName", v)}
-          placeholder="e.g. AfricaPay Ltd"
-        />
-        <Field
-          label="Jurisdiction (ISO-2)"
-          value={form.jurisdiction}
-          onChange={(v) => update("jurisdiction", v)}
-          placeholder="NG, GB, US…"
-          autoCapitalize="characters"
-          maxLength={2}
-        />
-        <Field
-          label="Years in operation"
-          value={form.yearsInOperation}
-          onChange={(v) => update("yearsInOperation", v)}
-          placeholder="e.g. 4"
-          keyboardType="number-pad"
-        />
-        <Text style={styles.fieldLabel}>Business type</Text>
-        <Segmented
-          options={["RSP", "PSP", "OTC"]}
-          value={form.businessType}
-          onChange={(v) => update("businessType", v as KybData["businessType"])}
-        />
-      </Section>
+function OperationsStep({
+  form,
+  update,
+}: {
+  form: FormState;
+  update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <Section title="Operations">
+      <Field
+        label="Monthly transaction volume (USD)"
+        value={form.monthlyTransactionVolume}
+        onChange={(v) => update("monthlyTransactionVolume", v)}
+        placeholder="e.g. 2500000"
+        keyboardType="number-pad"
+      />
+      <Field
+        label="Primary corridor"
+        value={form.primaryCorridor}
+        onChange={(v) => update("primaryCorridor", v)}
+        placeholder="e.g. NG-GB"
+        autoCapitalize="characters"
+      />
+      <Field
+        label="Settlement partners"
+        value={form.settlementPartners}
+        onChange={(v) => update("settlementPartners", v)}
+        placeholder="e.g. Stanbic, Access Bank"
+      />
+      <Text style={styles.fieldLabel}>Settlement cycle</Text>
+      <Segmented
+        options={["T+0", "T+1", "T+2"]}
+        value={form.settlementCycle}
+        onChange={(v) => update("settlementCycle", v as KybData["settlementCycle"])}
+      />
+    </Section>
+  );
+}
 
-      <Section title="Operations">
-        <Field
-          label="Monthly transaction volume (USD)"
-          value={form.monthlyTransactionVolume}
-          onChange={(v) => update("monthlyTransactionVolume", v)}
-          placeholder="e.g. 2500000"
-          keyboardType="number-pad"
-        />
-        <Field
-          label="Annual revenue (USD)"
-          value={form.annualRevenue}
-          onChange={(v) => update("annualRevenue", v)}
-          placeholder="e.g. 18000000"
-          keyboardType="number-pad"
-        />
-        <Field
-          label="Primary corridor"
-          value={form.primaryCorridor}
-          onChange={(v) => update("primaryCorridor", v)}
-          placeholder="e.g. NG-GB"
-          autoCapitalize="characters"
-        />
-      </Section>
+function FinancialStep({
+  form,
+  update,
+}: {
+  form: FormState;
+  update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <Section title="Financial">
+      <Field
+        label="Annual revenue (USD)"
+        value={form.annualRevenue}
+        onChange={(v) => update("annualRevenue", v)}
+        placeholder="e.g. 18000000"
+        keyboardType="number-pad"
+      />
+      <Field
+        label="Net income (USD)"
+        value={form.netIncome}
+        onChange={(v) => update("netIncome", v)}
+        placeholder="e.g. 3200000"
+        keyboardType="number-pad"
+      />
+      <Field
+        label="Total equity (USD)"
+        value={form.totalEquity}
+        onChange={(v) => update("totalEquity", v)}
+        placeholder="e.g. 7500000"
+        keyboardType="number-pad"
+      />
+      <Field
+        label="Debt ratio"
+        value={form.debtRatio}
+        onChange={(v) => update("debtRatio", v)}
+        placeholder="e.g. 0.32"
+        keyboardType="decimal-pad"
+      />
+    </Section>
+  );
+}
 
-      <Section title="Compliance">
-        <View style={styles.switchRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.fieldLabel}>AML policy in place</Text>
-            <Text style={styles.fieldHelp}>
-              Required for credit eligibility.
-            </Text>
-          </View>
-          <Switch
-            value={form.amlPolicyInPlace}
-            onValueChange={(v) => update("amlPolicyInPlace", v)}
-            trackColor={{ false: PaymateColors.border, true: accent }}
-          />
+function ComplianceStep({
+  form,
+  update,
+}: {
+  form: FormState;
+  update: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  return (
+    <Section title="Compliance">
+      <View style={styles.switchRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.fieldLabel}>AML policy in place</Text>
+          <Text style={styles.fieldHelp}>Required for credit eligibility.</Text>
         </View>
-      </Section>
-
-      <View style={{ marginTop: Spacing.xl }}>
-        <PrimaryButton
-          label="Submit for AI Underwriting"
-          onPress={onSubmit}
-          disabled={!valid}
-          accent={accent}
+        <Switch
+          value={form.amlPolicyInPlace}
+          onValueChange={(v) => update("amlPolicyInPlace", v)}
+          trackColor={{ false: PaymateColors.border, true: accent }}
         />
       </View>
-    </>
+      <Field
+        label="Sanctions screening provider"
+        value={form.sanctionsScreeningProvider}
+        onChange={(v) => update("sanctionsScreeningProvider", v)}
+        placeholder="e.g. ComplyAdvantage"
+      />
+      <Field
+        label="Last regulatory audit date"
+        value={form.lastRegulatoryAuditDate}
+        onChange={(v) => update("lastRegulatoryAuditDate", v)}
+        placeholder="YYYY-MM-DD"
+      />
+    </Section>
+  );
+}
+
+// ============================================================================
+// Stepper + result view
+// ============================================================================
+
+function Stepper({ step }: { step: Step }) {
+  return (
+    <View style={styles.stepper}>
+      {stepLabels.map((label, i) => {
+        const done = i < step;
+        const active = i === step;
+        return (
+          <View key={i} style={styles.stepCol}>
+            <View
+              style={[
+                styles.stepDot,
+                done && { backgroundColor: accent, borderColor: accent },
+                active && { borderColor: accent },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.stepDotText,
+                  done && { color: "#0a0a0a" },
+                  active && { color: accent },
+                ]}
+              >
+                {done ? "✓" : i + 1}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.stepLabel,
+                active && { color: accent, fontWeight: "700" },
+              ]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -314,7 +512,7 @@ function ScoredView({
         <Text style={styles.statusBannerTitle}>Awaiting admin approval</Text>
         <Text style={styles.statusBannerBody}>
           Your KYR is now visible to the admin. Once approved, your credit
-          limit and personal interest rate go on-chain — you can then draw
+          limit and personal interest rate go on-chain. You can then draw
           USDC from the pool.
         </Text>
       </View>
@@ -325,6 +523,10 @@ function ScoredView({
     </View>
   );
 }
+
+// ============================================================================
+// Reusable form pieces
+// ============================================================================
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -423,6 +625,37 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     marginBottom: Spacing.xl,
   },
+
+  // Stepper
+  stepper: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.sm,
+  },
+  stepCol: { alignItems: "center", flex: 1 },
+  stepDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: PaymateColors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: PaymateColors.bgCard,
+  },
+  stepDotText: {
+    color: PaymateColors.textSecondary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  stepLabel: {
+    color: PaymateColors.textMuted,
+    fontSize: 11,
+    marginTop: 6,
+  },
+
+  // Sections
   section: { marginTop: Spacing.lg },
   sectionTitle: {
     color: accent,
@@ -446,6 +679,8 @@ const styles = StyleSheet.create({
     color: PaymateColors.textPrimary,
     fontSize: 15,
   },
+
+  // Segmented
   segGroup: {
     flexDirection: "row",
     gap: Spacing.sm,
@@ -464,11 +699,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+
+  // Switch row
   switchRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
   },
+
+  // Nav row (Back / Continue)
+  navRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: Spacing.xl,
+    gap: Spacing.md,
+  },
+
+  // Scoring / scored / error
   scoringCard: {
     padding: Spacing.xl,
     borderRadius: Radius.lg,

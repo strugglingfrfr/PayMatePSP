@@ -156,12 +156,12 @@ export default function PspPosition() {
         </View>
       )}
 
-      {/* State 3 & 4: approved on-chain */}
+      {/* State 3 & 4: approved on-chain — full v1 5-stat row */}
       {onChain && psp && pool && (
         <>
           <View style={styles.statsRow}>
             <StatCard
-              label="Credit Limit"
+              label="Drawdown Limit"
               value={`$${(psp.creditLimit / 1e6).toFixed(2)}`}
               unit="USDC"
             />
@@ -174,10 +174,35 @@ export default function PspPosition() {
           </View>
           <View style={[styles.statsRow, { marginTop: Spacing.md }]}>
             <StatCard
+              label="KYR Rating"
+              value={kyb?.kyrScore?.rating ?? "—"}
+              unit={kyb?.kyrScore ? `${kyb.kyrScore.totalScore}/100` : ""}
+              accent={accent}
+            />
+            <StatCard
               label="Daily Rate"
               value={`${(psp.personalRateBps / 100).toFixed(2)}%`}
               unit="per day"
               accent={accent}
+            />
+          </View>
+          <View style={[styles.statsRow, { marginTop: Spacing.md }]}>
+            <StatCard
+              label="Pool Utilization"
+              value={
+                pool.totalLiquidity > 0
+                  ? `${Math.round(((pool.totalLiquidity - pool.availableLiquidity) / pool.totalLiquidity) * 100)}%`
+                  : "0%"
+              }
+              unit={
+                pool.totalLiquidity === 0
+                  ? "empty"
+                  : (pool.totalLiquidity - pool.availableLiquidity) / pool.totalLiquidity < 0.5
+                    ? "Healthy"
+                    : (pool.totalLiquidity - pool.availableLiquidity) / pool.totalLiquidity < 0.8
+                      ? "Moderate"
+                      : "High"
+              }
             />
             <StatCard
               label="Status"

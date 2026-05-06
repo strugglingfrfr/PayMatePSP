@@ -50,14 +50,29 @@ export type PoolState = {
 };
 
 export type KybData = {
+  // Company (5)
   companyName: string;
   jurisdiction: string;
+  dateOfIncorporation: string;
   yearsInOperation: number;
   businessType: "RSP" | "PSP" | "OTC";
+
+  // Operations (4)
   monthlyTransactionVolume: number;
-  annualRevenue: number;
-  amlPolicyInPlace: boolean;
   primaryCorridor: string;
+  settlementPartners: string;
+  settlementCycle: "T+0" | "T+1" | "T+2";
+
+  // Financial (4)
+  annualRevenue: number;
+  netIncome: number;
+  totalEquity: number;
+  debtRatio: number;
+
+  // Compliance (3)
+  amlPolicyInPlace: boolean;
+  sanctionsScreeningProvider: string;
+  lastRegulatoryAuditDate: string;
 };
 
 export type KyrScore = {

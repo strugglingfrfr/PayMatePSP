@@ -48,12 +48,20 @@ export async function submitKyb(
   const required = [
     "companyName",
     "jurisdiction",
+    "dateOfIncorporation",
     "yearsInOperation",
     "businessType",
     "monthlyTransactionVolume",
-    "annualRevenue",
-    "amlPolicyInPlace",
     "primaryCorridor",
+    "settlementPartners",
+    "settlementCycle",
+    "annualRevenue",
+    "netIncome",
+    "totalEquity",
+    "debtRatio",
+    "amlPolicyInPlace",
+    "sanctionsScreeningProvider",
+    "lastRegulatoryAuditDate",
   ] as const;
   for (const k of required) {
     if (kybData[k] === undefined || kybData[k] === null) {

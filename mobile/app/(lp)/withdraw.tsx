@@ -113,11 +113,10 @@ export default function LpWithdraw() {
       </View>
 
       <View style={styles.noteCard}>
-        <Text style={styles.noteTitle}>Note</Text>
+        <Text style={styles.noteTitle}>Withdrawals</Text>
         <Text style={styles.noteBody}>
-          Yield is capped by the on-chain fee reserve. If the reserve is
-          smaller than your projected yield, you'll receive principal +
-          whatever's available. Reserve grows as PSPs repay.
+          Withdraw anytime. You receive your full deposit plus the yield
+          you've earned.
         </Text>
       </View>
     </ScrollView>

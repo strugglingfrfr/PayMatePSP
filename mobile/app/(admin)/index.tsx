@@ -131,7 +131,7 @@ export default function AdminDashboard() {
               label="Reserve balance"
               value={`$${(pool!.feeReserve / 1e6).toFixed(4)} USDC`}
             />
-            <Row label="Investor APY" value={`${pool!.lpApyBps / 100}%`} />
+            <Row label="LP APY target" value={`${pool!.lpApyBps / 100}%`} />
             <Text style={styles.yieldNote}>
               Funded by PSP fees. Yield is paid out lazily on LP withdraw,
               capped by the reserve so the pool can never overpay.

@@ -5,7 +5,7 @@ import type { PoolState } from "../types";
 
 const RPC_URL = process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID ?? "6Shf4n6CqC2Wyt21YK6Kfw5rtDn2GWKGURvRdysqV92h",
+  process.env.PROGRAM_ID ?? "5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg",
 );
 
 const connection = new Connection(RPC_URL, "confirmed");

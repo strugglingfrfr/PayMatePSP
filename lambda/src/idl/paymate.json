@@ -418,9 +418,15 @@
     {
       "name": "withdraw",
       "docs": [
-        "LP withdraws full principal + accrued yield, capped by what the pool",
-        "has actually collected in fees. Yield is computed pro-rata to the",
-        "second since last deposit."
+        "LP withdraws full principal + accrued yield. Yield is the LP's",
+        "pro-rata share of the on-chain fee_reserve at the moment of withdraw:",
+        "",
+        "yield = (principal / total_liquidity) × fee_reserve",
+        "",
+        "Single LP → gets the full fee_reserve. Multi-LP → split pro-rata by",
+        "share of total liquidity. PSP fees flow to LPs as soon as the LP",
+        "claims, regardless of clock-time elapsed. Mirrors how Uniswap-style",
+        "LP fees work."
       ],
       "discriminator": [
         183,

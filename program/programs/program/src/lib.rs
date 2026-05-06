@@ -128,27 +128,33 @@ pub mod paymate {
         Ok(())
     }
 
-    /// LP withdraws full principal + accrued yield, capped by what the pool
-    /// has actually collected in fees. Yield is computed pro-rata to the
-    /// second since last deposit.
+    /// LP withdraws full principal + accrued yield. Yield is the LP's
+    /// pro-rata share of the on-chain fee_reserve at the moment of withdraw:
+    ///
+    ///     yield = (principal / total_liquidity) × fee_reserve
+    ///
+    /// Single LP → gets the full fee_reserve. Multi-LP → split pro-rata by
+    /// share of total liquidity. PSP fees flow to LPs as soon as the LP
+    /// claims, regardless of clock-time elapsed. Mirrors how Uniswap-style
+    /// LP fees work.
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
         let principal = ctx.accounts.lp_account.deposited_amount;
         require!(principal > 0, PoolError::NothingToWithdraw);
 
-        let now = Clock::get()?.unix_timestamp;
-        let elapsed = (now - ctx.accounts.lp_account.last_deposit_ts).max(0) as u128;
+        let total_liq = ctx.accounts.pool.total_liquidity as u128;
+        let reserve = ctx.accounts.pool.fee_reserve as u128;
 
-        // raw_yield = principal * apy_bps * elapsed / (SECONDS_PER_YEAR * BPS_DIVISOR)
-        let raw_yield: u128 = (principal as u128)
-            .checked_mul(ctx.accounts.pool.lp_apy_bps as u128)
-            .ok_or(PoolError::MathOverflow)?
-            .checked_mul(elapsed)
-            .ok_or(PoolError::MathOverflow)?
-            .checked_div(SECONDS_PER_YEAR)
-            .ok_or(PoolError::MathOverflow)?
-            .checked_div(BPS_DIVISOR)
-            .ok_or(PoolError::MathOverflow)?;
-        let yield_paid: u64 = raw_yield.min(ctx.accounts.pool.fee_reserve as u128) as u64;
+        // Pro-rata share of fee_reserve at withdraw time.
+        let yield_paid: u64 = if total_liq == 0 {
+            0
+        } else {
+            (principal as u128)
+                .checked_mul(reserve)
+                .ok_or(PoolError::MathOverflow)?
+                .checked_div(total_liq)
+                .ok_or(PoolError::MathOverflow)?
+                .min(reserve) as u64
+        };
         let total_payout = principal
             .checked_add(yield_paid)
             .ok_or(PoolError::MathOverflow)?;

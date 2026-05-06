@@ -29,6 +29,7 @@ export default function RootLayout() {
           <Stack.Screen name="(lp)" />
           <Stack.Screen name="(psp)" />
           <Stack.Screen name="(admin)" />
+          <Stack.Screen name="onboard" options={{ presentation: "modal" }} />
         </Stack>
       </WalletProvider>
     </RoleProvider>

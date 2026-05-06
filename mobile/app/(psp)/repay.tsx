@@ -1,17 +1,254 @@
-import { View, Text, StyleSheet } from "react-native";
-import { PaymateColors, Spacing } from "../../constants/theme";
+// PSP — Repay screen.
+// Reads on-chain PspAccount, displays principal + computed fee + total owed,
+// single button to repay (which calls Anchor repay via MWA).
+
+import { useCallback, useEffect, useState } from "react";
+import {
+  ScrollView,
+  View,
+  Text,
+  StyleSheet,
+  Alert,
+  RefreshControl,
+} from "react-native";
+import { PublicKey } from "@solana/web3.js";
+import {
+  PaymateColors,
+  Spacing,
+  Radius,
+  roleTheme,
+} from "../../constants/theme";
+import { PrimaryButton } from "../../src/components/Button";
+import { useWallet } from "../../src/lib/wallet";
+import { fetchPspAccount, repayDrawdown } from "../../src/lib/onchain";
+
+const accent = roleTheme("PSP").accent;
 
 export default function PspRepay() {
+  const { publicKey } = useWallet();
+  const [psp, setPsp] = useState<Awaited<ReturnType<typeof fetchPspAccount>>>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [tick, setTick] = useState(0); // re-render every second to update fee
+
+  const load = useCallback(async () => {
+    if (!publicKey) return;
+    setRefreshing(true);
+    try {
+      setPsp(await fetchPspAccount(new PublicKey(publicKey)));
+    } catch {
+      setPsp(null);
+    }
+    setRefreshing(false);
+  }, [publicKey]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Tick once a second so the accrued fee + days display updates live.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hasActive = !!(psp && psp.activePositionAmount > 0);
+  let principal = 0;
+  let fee = 0;
+  let total = 0;
+  let elapsedDays = "0.00";
+  let rateLabel = "—";
+
+  if (hasActive && psp) {
+    principal = psp.activePositionAmount;
+    const elapsed = Math.max(1, Math.floor(Date.now() / 1000) - psp.activePositionDrawdownTs);
+    fee = Math.floor((principal * psp.personalRateBps * elapsed) / (86400 * 10_000));
+    total = principal + fee;
+    elapsedDays = (elapsed / 86400).toFixed(2);
+    rateLabel = `${(psp.personalRateBps / 100).toFixed(2)}%/day`;
+  }
+  // Reference tick to keep linter happy
+  void tick;
+
+  const handleRepay = async () => {
+    if (!publicKey || !hasActive) return;
+    setPaying(true);
+    try {
+      const r = await repayDrawdown({ ownerPubkey: publicKey, amountMicro: total });
+      Alert.alert(
+        "Repayment confirmed",
+        `Paid $${(total / 1e6).toFixed(4)} (principal + fee)\nTx: ${r.signature.slice(0, 12)}…`,
+      );
+      load();
+    } catch (err) {
+      Alert.alert("Repay failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setPaying(false);
+    }
+  };
+
   return (
-    <View style={styles.root}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={accent} />}
+    >
       <Text style={styles.heading}>Repay</Text>
-      <Text style={styles.muted}>Phase 3c — principal + computed fee.</Text>
-    </View>
+
+      {!hasActive && (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyText}>
+            No active drawdown. Head to the Position tab to request credit.
+          </Text>
+        </View>
+      )}
+
+      {hasActive && (
+        <>
+          <View style={styles.totalCard}>
+            <Text style={styles.totalLabel}>Total Due</Text>
+            <Text style={styles.totalValue}>${(total / 1e6).toFixed(4)}</Text>
+            <Text style={styles.totalUnit}>USDC</Text>
+
+            <View style={styles.breakdownRow}>
+              <View style={styles.breakItem}>
+                <Text style={styles.breakLabel}>Principal</Text>
+                <Text style={styles.breakValue}>${(principal / 1e6).toFixed(2)}</Text>
+              </View>
+              <Text style={styles.breakPlus}>+</Text>
+              <View style={styles.breakItem}>
+                <Text style={styles.breakLabel}>Fee ({rateLabel})</Text>
+                <Text style={[styles.breakValue, { color: accent }]}>
+                  ${(fee / 1e6).toFixed(4)}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.totalSubtle}>
+              Day {elapsedDays} of 30 day window
+            </Text>
+          </View>
+
+          <View style={{ marginTop: Spacing.xl }}>
+            <PrimaryButton
+              label={paying ? "Confirming…" : "Repay Now →"}
+              onPress={handleRepay}
+              loading={paying}
+              accent={accent}
+            />
+          </View>
+
+          <View style={styles.noteCard}>
+            <Text style={styles.noteTitle}>How the fee is computed</Text>
+            <Text style={styles.noteBody}>
+              fee = principal × {rateLabel.replace("/day", "")} × seconds_elapsed
+              {"\n"}
+              Mirrors the on-chain math exactly. Updates live.
+            </Text>
+          </View>
+        </>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: Spacing.lg, backgroundColor: PaymateColors.bg },
-  heading: { color: PaymateColors.textPrimary, fontSize: 24, fontWeight: "700" },
-  muted: { color: PaymateColors.textMuted, marginTop: Spacing.md, fontSize: 14 },
+  root: { flex: 1, backgroundColor: PaymateColors.bg },
+  content: { padding: Spacing.lg, paddingBottom: 60 },
+  heading: {
+    color: PaymateColors.textPrimary,
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: Spacing.lg,
+  },
+  emptyCard: {
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.border,
+    backgroundColor: PaymateColors.bgCard,
+    alignItems: "center",
+  },
+  emptyText: {
+    color: PaymateColors.textMuted,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  totalCard: {
+    padding: Spacing.xl,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: accent,
+    backgroundColor: "rgba(96,165,250,0.06)",
+    alignItems: "center",
+  },
+  totalLabel: {
+    color: PaymateColors.textMuted,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontWeight: "600",
+  },
+  totalValue: {
+    color: PaymateColors.textPrimary,
+    fontSize: 40,
+    fontFamily: "monospace",
+    fontWeight: "800",
+    marginTop: Spacing.sm,
+  },
+  totalUnit: {
+    color: accent,
+    fontSize: 13,
+    fontFamily: "monospace",
+    marginTop: 2,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.lg,
+    marginTop: Spacing.lg,
+  },
+  breakItem: { alignItems: "center" },
+  breakLabel: {
+    color: PaymateColors.textMuted,
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  breakValue: {
+    color: PaymateColors.textPrimary,
+    fontSize: 16,
+    fontFamily: "monospace",
+    fontWeight: "700",
+  },
+  breakPlus: {
+    color: PaymateColors.textMuted,
+    fontSize: 16,
+  },
+  totalSubtle: {
+    color: PaymateColors.textMuted,
+    fontSize: 12,
+    marginTop: Spacing.lg,
+  },
+  noteCard: {
+    marginTop: Spacing.xl,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.border,
+    backgroundColor: PaymateColors.bgCard,
+  },
+  noteTitle: {
+    color: PaymateColors.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  noteBody: {
+    color: PaymateColors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "monospace",
+  },
 });

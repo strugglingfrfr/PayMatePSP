@@ -185,7 +185,7 @@ if [ -z "$API_ID" ]; then
   INTEGRATION_ID=$(aws apigatewayv2 get-integrations \
     --api-id "$API_ID" --region "$REGION" \
     --query "Items[0].IntegrationId" --output text)
-  for route in "POST /kyb/submit" "GET /kyb/status/{wallet}" "GET /pool/state" "POST /admin/init-pool" "POST /admin/approve"; do
+  for route in "POST /kyb/submit" "GET /kyb/status/{wallet}" "GET /pool/state" "POST /admin/init-pool" "POST /admin/approve" "GET /admin/psps"; do
     aws apigatewayv2 create-route \
       --api-id "$API_ID" \
       --route-key "$route" \

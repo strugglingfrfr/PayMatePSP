@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, RefreshControl } from "react-native";
-import { PublicKey } from "@solana/web3.js";
 import {
   PaymateColors,
   Spacing,
@@ -11,7 +10,8 @@ import {
   roleTheme,
 } from "../../constants/theme";
 import { useWallet, shortAddr } from "../../src/lib/wallet";
-import { fetchLpAccount, projectedYield } from "../../src/lib/onchain";
+import { projectedYield } from "../../src/lib/onchain";
+import { api } from "../../src/lib/api";
 
 const accent = roleTheme("LP").accent;
 
@@ -23,11 +23,8 @@ export default function LpHistory() {
   const load = useCallback(async () => {
     if (!publicKey) return;
     setRefreshing(true);
-    try {
-      setLp(await fetchLpAccount(new PublicKey(publicKey)));
-    } catch {
-      setLp(null);
-    }
+    const r = await api.lpState(publicKey);
+    setLp(r.ok ? r.data : null);
     setRefreshing(false);
   }, [publicKey]);
 

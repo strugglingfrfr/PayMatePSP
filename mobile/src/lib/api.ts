@@ -123,6 +123,21 @@ export const api = {
   kybStatus: (wallet: string) =>
     call<KybSubmission>(`/kyb/status/${wallet}`),
 
+  // Server-side on-chain reads. Lambda decodes raw account bytes (bulletproof
+  // on Node) instead of relying on Anchor's client-side decoder which is
+  // flaky on React Native Android (Buffer/BN polyfill mismatches).
+  lpState: (wallet: string) =>
+    call<{ depositedAmount: number; lastDepositTs: number } | null>(
+      `/lp/state/${wallet}`,
+    ),
+  pspState: (wallet: string) =>
+    call<{
+      creditLimit: number;
+      personalRateBps: number;
+      activePositionAmount: number;
+      activePositionDrawdownTs: number;
+    } | null>(`/psp/state/${wallet}`),
+
   adminListPsps: () => call<KybSubmission[]>("/admin/psps"),
 
   adminInitPool: (args: {

@@ -1,7 +1,12 @@
-// Pool state endpoint. Reads on-chain Solana state and returns it as JSON.
+// Pool, LP, and PSP state endpoints. Reads on-chain Solana state via raw
+// getAccountInfo + manual byte decode. We do this in Lambda (Node) instead
+// of Anchor's account fetcher in mobile because Anchor's IDL-driven decoder
+// is fragile on React Native Android (Buffer / BN / Uint8Array polyfill
+// disagreements). Server-side Node has clean Buffer + BigInt support, so
+// the raw byte decode is bulletproof.
 
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { fetchPoolState } from "../lib/solana";
+import { fetchPoolState, fetchLpAccount, fetchPspAccount } from "../lib/solana";
 import type { ApiResponse } from "../types";
 
 const json = (
@@ -29,6 +34,40 @@ export async function getPoolState(
         error: "pool not initialized — call initialize_pool first",
       });
     }
+    return json(200, { ok: true, data: state });
+  } catch (err) {
+    return json(500, {
+      ok: false,
+      error: `RPC error: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+}
+
+// GET /lp/state/{wallet}
+export async function getLpState(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const wallet = event.pathParameters?.wallet;
+  if (!wallet) return json(400, { ok: false, error: "wallet path param required" });
+  try {
+    const state = await fetchLpAccount(wallet);
+    return json(200, { ok: true, data: state });
+  } catch (err) {
+    return json(500, {
+      ok: false,
+      error: `RPC error: ${err instanceof Error ? err.message : String(err)}`,
+    });
+  }
+}
+
+// GET /psp/state/{wallet}
+export async function getPspState(
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const wallet = event.pathParameters?.wallet;
+  if (!wallet) return json(400, { ok: false, error: "wallet path param required" });
+  try {
+    const state = await fetchPspAccount(wallet);
     return json(200, { ok: true, data: state });
   } catch (err) {
     return json(500, {

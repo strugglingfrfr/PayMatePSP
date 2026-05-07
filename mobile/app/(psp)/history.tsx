@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, RefreshControl } from "react-native";
-import { PublicKey } from "@solana/web3.js";
 import {
   PaymateColors,
   Spacing,
@@ -11,31 +10,32 @@ import {
   roleTheme,
 } from "../../constants/theme";
 import { useWallet, shortAddr } from "../../src/lib/wallet";
-import { fetchPspAccount } from "../../src/lib/onchain";
 import { api, type KybSubmission } from "../../src/lib/api";
+
+type PspState = {
+  creditLimit: number;
+  personalRateBps: number;
+  activePositionAmount: number;
+  activePositionDrawdownTs: number;
+};
 
 const accent = roleTheme("PSP").accent;
 
 export default function PspHistory() {
   const { publicKey } = useWallet();
-  const [psp, setPsp] = useState<Awaited<ReturnType<typeof fetchPspAccount>>>(null);
+  const [psp, setPsp] = useState<PspState | null>(null);
   const [kyb, setKyb] = useState<KybSubmission | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!publicKey) return;
     setRefreshing(true);
-    try {
-      const owner = new PublicKey(publicKey);
-      const [a, b] = await Promise.all([
-        fetchPspAccount(owner),
-        api.kybStatus(publicKey),
-      ]);
-      setPsp(a);
-      setKyb(b.ok ? b.data : null);
-    } catch {
-      /* ignore */
-    }
+    const [a, b] = await Promise.all([
+      api.pspState(publicKey),
+      api.kybStatus(publicKey),
+    ]);
+    setPsp(a.ok ? a.data : null);
+    setKyb(b.ok ? b.data : null);
     setRefreshing(false);
   }, [publicKey]);
 

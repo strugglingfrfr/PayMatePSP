@@ -57,3 +57,69 @@ export async function fetchPoolState(): Promise<PoolState | null> {
     ...decoded,
   };
 }
+
+// LP account layout (matches Anchor program/src/lib.rs LpAccount):
+//   8 (anchor discriminator)
+//   + 32 owner
+//   + 8  deposited_amount
+//   + 8  last_deposit_ts
+//   + 1  bump
+export type LpAccountState = {
+  depositedAmount: number;
+  lastDepositTs: number;
+};
+
+export async function fetchLpAccount(
+  ownerBase58: string,
+): Promise<LpAccountState | null> {
+  const owner = new PublicKey(ownerBase58);
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("lp"), owner.toBuffer()],
+    PROGRAM_ID,
+  );
+  const account = await connection.getAccountInfo(pda);
+  if (!account) return null;
+  const buf = account.data as Buffer;
+  // Skip 8 (discriminator) + 32 (owner) = 40
+  const o = 40;
+  return {
+    depositedAmount: Number(buf.readBigUInt64LE(o)),
+    lastDepositTs: Number(buf.readBigInt64LE(o + 8)),
+  };
+}
+
+// PSP account layout (matches Anchor program/src/lib.rs PspAccount):
+//   8 (anchor discriminator)
+//   + 32 owner
+//   + 8  credit_limit
+//   + 2  personal_rate_bps
+//   + 8  active_position_amount
+//   + 8  active_position_drawdown_ts
+//   + 1  bump
+export type PspAccountState = {
+  creditLimit: number;
+  personalRateBps: number;
+  activePositionAmount: number;
+  activePositionDrawdownTs: number;
+};
+
+export async function fetchPspAccount(
+  ownerBase58: string,
+): Promise<PspAccountState | null> {
+  const owner = new PublicKey(ownerBase58);
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("psp"), owner.toBuffer()],
+    PROGRAM_ID,
+  );
+  const account = await connection.getAccountInfo(pda);
+  if (!account) return null;
+  const buf = account.data as Buffer;
+  // Skip 8 + 32 = 40
+  const o = 40;
+  return {
+    creditLimit: Number(buf.readBigUInt64LE(o)),
+    personalRateBps: buf.readUInt16LE(o + 8),
+    activePositionAmount: Number(buf.readBigUInt64LE(o + 10)),
+    activePositionDrawdownTs: Number(buf.readBigInt64LE(o + 18)),
+  };
+}

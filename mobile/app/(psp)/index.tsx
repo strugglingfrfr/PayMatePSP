@@ -16,7 +16,6 @@ import {
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { PublicKey } from "@solana/web3.js";
 import {
   PaymateColors,
   Spacing,
@@ -26,32 +25,43 @@ import {
 import { StatCard } from "../../src/components/StatCard";
 import { PrimaryButton, OutlineButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
-import { fetchPspAccount, requestDrawdown } from "../../src/lib/onchain";
+import { requestDrawdown } from "../../src/lib/onchain";
 import { api, type PoolState, type KybSubmission } from "../../src/lib/api";
+
+type PspState = {
+  creditLimit: number;
+  personalRateBps: number;
+  activePositionAmount: number;
+  activePositionDrawdownTs: number;
+};
 
 const accent = roleTheme("PSP").accent;
 
 export default function PspPosition() {
   const router = useRouter();
   const { publicKey } = useWallet();
-  const [psp, setPsp] = useState<Awaited<ReturnType<typeof fetchPspAccount>>>(null);
+  const [psp, setPsp] = useState<PspState | null>(null);
   const [pool, setPool] = useState<PoolState | null>(null);
   const [kyb, setKyb] = useState<KybSubmission | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drawAmount, setDrawAmount] = useState("");
   const [drawing, setDrawing] = useState(false);
+  const [drawStatus, setDrawStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "ok"; sig: string; usdc: number }
+    | { kind: "err"; msg: string }
+  >({ kind: "idle" });
 
   const load = useCallback(async () => {
     if (!publicKey) return;
     setRefreshing(true);
     try {
-      const owner = new PublicKey(publicKey);
-      const [pspAcc, poolRes, kybRes] = await Promise.all([
-        fetchPspAccount(owner),
+      const [pspRes, poolRes, kybRes] = await Promise.all([
+        api.pspState(publicKey),
         api.poolState(),
         api.kybStatus(publicKey),
       ]);
-      setPsp(pspAcc);
+      setPsp(pspRes.ok ? pspRes.data : null);
       setPool(poolRes.ok ? poolRes.data : null);
       setKyb(kybRes.ok ? kybRes.data : null);
     } catch {
@@ -65,30 +75,60 @@ export default function PspPosition() {
     load();
   }, [load]);
 
-  const onChain = !!(psp && psp.creditLimit > 0);
-  const hasActive = !!(psp && psp.activePositionAmount > 0);
+  // Source of truth for "is this PSP approved":
+  //   1. DDB submission status (set by /admin/approve when on-chain set_credit_limit
+  //      lands successfully). Fast, reliable.
+  //   2. On-chain PSP PDA creditLimit > 0. Authoritative but Anchor's account
+  //      decoder occasionally hangs on Android, so we treat DDB as primary.
+  const ddbApproved = !!(
+    kyb && kyb.status === "approved" && kyb.creditLimit && kyb.creditLimit > 0
+  );
+  const onChainApproved = !!(psp && psp.creditLimit > 0);
+  const onChain = ddbApproved || onChainApproved;
+
+  // Use on-chain `psp` when available (carries activePositionAmount for the
+  // active-drawdown screen). Synthesize from DDB when on-chain fetch failed.
+  const effectivePsp =
+    psp ??
+    (ddbApproved
+      ? {
+          creditLimit: kyb!.creditLimit!,
+          personalRateBps: kyb!.personalRateBps ?? 0,
+          activePositionAmount: 0,
+          activePositionDrawdownTs: 0,
+        }
+      : null);
+  const hasActive = !!(effectivePsp && effectivePsp.activePositionAmount > 0);
   const submitted = !!kyb;
 
   const handleDraw = async () => {
-    if (!publicKey || !psp) return;
+    if (!publicKey || !effectivePsp) return;
     const usdc = parseFloat(drawAmount);
-    if (!usdc || usdc <= 0) return Alert.alert("Invalid", "Enter a USDC amount > 0.");
+    if (!usdc || usdc <= 0) {
+      setDrawStatus({ kind: "err", msg: "Enter a USDC amount greater than 0." });
+      return;
+    }
     const micro = Math.floor(usdc * 1_000_000);
-    if (micro > psp.creditLimit) {
-      return Alert.alert(
-        "Exceeds credit limit",
-        `Your credit limit is $${(psp.creditLimit / 1e6).toFixed(2)}.`,
-      );
+    if (micro > effectivePsp.creditLimit) {
+      setDrawStatus({
+        kind: "err",
+        msg: `Exceeds your credit limit ($${(effectivePsp.creditLimit / 1e6).toFixed(2)}).`,
+      });
+      return;
     }
 
     setDrawing(true);
+    setDrawStatus({ kind: "idle" });
     try {
       const r = await requestDrawdown({ ownerPubkey: publicKey, amountMicro: micro });
-      Alert.alert("Drawdown confirmed", `Tx: ${r.signature.slice(0, 12)}…`);
+      setDrawStatus({ kind: "ok", sig: r.signature, usdc });
       setDrawAmount("");
       load();
     } catch (err) {
-      Alert.alert("Drawdown failed", err instanceof Error ? err.message : String(err));
+      setDrawStatus({
+        kind: "err",
+        msg: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setDrawing(false);
     }
@@ -158,13 +198,13 @@ export default function PspPosition() {
         </View>
       )}
 
-      {/* State 3 & 4: approved on-chain — full v1 5-stat row */}
-      {onChain && psp && pool && (
+      {/* State 3 & 4: approved — full stat row */}
+      {onChain && effectivePsp && pool && (
         <>
           <View style={styles.statsRow}>
             <StatCard
               label="Drawdown Limit"
-              value={`$${(psp.creditLimit / 1e6).toFixed(2)}`}
+              value={`$${(effectivePsp.creditLimit / 1e6).toFixed(2)}`}
               unit="USDC"
             />
             <StatCard
@@ -183,7 +223,7 @@ export default function PspPosition() {
             />
             <StatCard
               label="Daily Rate"
-              value={`${(psp.personalRateBps / 100).toFixed(2)}%`}
+              value={`${(effectivePsp.personalRateBps / 100).toFixed(2)}%`}
               unit="per day"
               accent={accent}
             />
@@ -215,17 +255,19 @@ export default function PspPosition() {
 
           {hasActive ? (
             <ActivePositionCard
-              amount={psp.activePositionAmount}
-              ts={psp.activePositionDrawdownTs}
-              rateBps={psp.personalRateBps}
+              amount={effectivePsp.activePositionAmount}
+              ts={effectivePsp.activePositionDrawdownTs}
+              rateBps={effectivePsp.personalRateBps}
               onRepay={() => router.push("/repay")}
             />
           ) : (
             <View style={styles.formCard}>
-              <Text style={styles.formTitle}>Request Drawdown</Text>
+              <Text style={styles.formTitle}>Draw Funds</Text>
               <Text style={styles.formSubtitle}>
-                Up to ${(psp.creditLimit / 1e6).toFixed(2)} USDC at{" "}
-                {(psp.personalRateBps / 100).toFixed(2)}%/day.
+                You have ${(effectivePsp.creditLimit / 1e6).toFixed(2)} in available credit at{" "}
+                {(effectivePsp.personalRateBps / 100).toFixed(2)}% per day. Draw any amount;
+                funds arrive in your wallet instantly via Solana. The on-chain program
+                enforces the cap.
               </Text>
 
               <Text style={styles.inputLabel}>Amount (USDC)</Text>
@@ -239,13 +281,31 @@ export default function PspPosition() {
               />
               <View style={{ marginTop: Spacing.lg }}>
                 <PrimaryButton
-                  label={drawing ? "Confirming…" : "Request Drawdown →"}
+                  label={drawing ? "Drawing…" : "Draw Funds →"}
                   onPress={handleDraw}
                   loading={drawing}
                   disabled={!drawAmount}
                   accent={accent}
                 />
               </View>
+
+              {drawStatus.kind === "ok" && (
+                <View style={styles.successBanner}>
+                  <Text style={styles.successTitle}>
+                    ✓ ${drawStatus.usdc.toFixed(2)} in your wallet
+                  </Text>
+                  <Text style={styles.successBody}>
+                    Tx: {drawStatus.sig.slice(0, 16)}…{"\n"}
+                    The Repay tab shows your total owed as fee accrues. Repay anytime.
+                  </Text>
+                </View>
+              )}
+              {drawStatus.kind === "err" && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorTitle}>Couldn't complete drawdown</Text>
+                  <Text style={styles.errorBody}>{drawStatus.msg}</Text>
+                </View>
+              )}
             </View>
           )}
         </>
@@ -585,5 +645,45 @@ const styles = StyleSheet.create({
   barFill: {
     height: "100%",
     borderRadius: 3,
+  },
+
+  successBanner: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.success,
+    backgroundColor: "rgba(16,185,129,0.10)",
+  },
+  successTitle: {
+    color: PaymateColors.success,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  successBody: {
+    color: PaymateColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "monospace",
+  },
+  errorBanner: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.error,
+    backgroundColor: "rgba(239,68,68,0.08)",
+  },
+  errorTitle: {
+    color: PaymateColors.error,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  errorBody: {
+    color: PaymateColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

@@ -24,12 +24,12 @@ import { api, type KybSubmission } from "../../src/lib/api";
 
 const accent = roleTheme("ADMIN").accent;
 
-type Filter = "all" | "pending" | "approved";
+type Tab = "pending" | "approved";
 
 export default function AdminPsps() {
   const [psps, setPsps] = useState<KybSubmission[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [tab, setTab] = useState<Tab>("pending");
   const [expandedWallet, setExpandedWallet] = useState<string | null>(null);
   const [approving, setApproving] = useState<string | null>(null);
 
@@ -44,15 +44,11 @@ export default function AdminPsps() {
     load();
   }, [load]);
 
-  const filtered = psps.filter((p) => {
-    if (filter === "all") return true;
-    if (filter === "approved") return p.status === "approved";
-    // "pending" = anything not approved
-    return p.status !== "approved";
-  });
+  const filtered = psps.filter((p) =>
+    tab === "approved" ? p.status === "approved" : p.status !== "approved",
+  );
 
   const counts = {
-    all: psps.length,
     pending: psps.filter((p) => p.status !== "approved").length,
     approved: psps.filter((p) => p.status === "approved").length,
   };
@@ -84,33 +80,42 @@ export default function AdminPsps() {
       }
     >
       <Text style={styles.heading}>PSP Management</Text>
-      <Text style={styles.subtitle}>
-        Every KYB submission. Tap a row to review the AI's assessment, then
-        approve to write credit terms on-chain.
-      </Text>
 
-      {/* Filter chips */}
-      <View style={styles.filterRow}>
-        <FilterChip
-          label={`All ${counts.all}`}
-          active={filter === "all"}
-          onPress={() => setFilter("all")}
+      {/* Two-tab segmented control: Pending Approval vs Approved Pool */}
+      <View style={styles.tabRow}>
+        <TabButton
+          label="Pending Approval"
+          count={counts.pending}
+          active={tab === "pending"}
+          onPress={() => {
+            setTab("pending");
+            setExpandedWallet(null);
+          }}
         />
-        <FilterChip
-          label={`Pending ${counts.pending}`}
-          active={filter === "pending"}
-          onPress={() => setFilter("pending")}
-        />
-        <FilterChip
-          label={`Approved ${counts.approved}`}
-          active={filter === "approved"}
-          onPress={() => setFilter("approved")}
+        <TabButton
+          label="Approved Pool"
+          count={counts.approved}
+          active={tab === "approved"}
+          onPress={() => {
+            setTab("approved");
+            setExpandedWallet(null);
+          }}
         />
       </View>
 
+      <Text style={styles.subtitle}>
+        {tab === "pending"
+          ? "PSPs awaiting credit approval. Tap to review the AI's KYR assessment and approve to write credit terms on-chain."
+          : "PSPs already on-chain. Each can self-draw up to their credit limit; the on-chain Solana program enforces the cap automatically."}
+      </Text>
+
       {filtered.length === 0 && (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No PSPs in this view.</Text>
+          <Text style={styles.emptyText}>
+            {tab === "pending"
+              ? "No PSPs awaiting approval. New KYB submissions appear here."
+              : "No approved PSPs yet. Approve one from the Pending tab to populate the pool."}
+          </Text>
         </View>
       )}
 
@@ -132,12 +137,14 @@ export default function AdminPsps() {
   );
 }
 
-function FilterChip({
+function TabButton({
   label,
+  count,
   active,
   onPress,
 }: {
   label: string;
+  count: number;
   active: boolean;
   onPress: () => void;
 }) {
@@ -145,17 +152,25 @@ function FilterChip({
     <Pressable
       onPress={onPress}
       style={[
-        styles.chip,
+        styles.tab,
         active && { backgroundColor: accent, borderColor: accent },
       ]}
     >
       <Text
         style={[
-          styles.chipText,
+          styles.tabLabel,
           active && { color: "#0a0a0a", fontWeight: "700" },
         ]}
       >
         {label}
+      </Text>
+      <Text
+        style={[
+          styles.tabCount,
+          active && { color: "#0a0a0a" },
+        ]}
+      >
+        {count}
       </Text>
     </Pressable>
   );
@@ -334,22 +349,38 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
 
-  filterRow: {
+  tabRow: {
     flexDirection: "row",
     gap: Spacing.sm,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
   },
-  chip: {
+  tab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
+    borderRadius: Radius.lg,
+    borderWidth: 1.5,
     borderColor: PaymateColors.border,
+    backgroundColor: PaymateColors.bgCard,
   },
-  chipText: {
+  tabLabel: {
     color: PaymateColors.textSecondary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
+  },
+  tabCount: {
+    color: PaymateColors.textMuted,
+    fontFamily: "monospace",
+    fontSize: 12,
+    fontWeight: "700",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
 
   emptyCard: {

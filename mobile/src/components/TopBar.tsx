@@ -20,25 +20,19 @@ export function TopBar() {
       <Pressable
         style={styles.brand}
         onPress={async () => {
+          // Clear role + wallet FIRST so the splash auto-redirect doesn't
+          // immediately bounce us back into the role's tab tree. The state
+          // update is synchronous from the React perspective; the AsyncStorage
+          // writes finish in the background.
+          setRole(null);
           await disconnect();
           if (Platform.OS === "web" && typeof window !== "undefined") {
-            // Web: hard reload. Expo Router's transparent route groups
-            // make /(lp) and / share the same URL path on web, which causes
-            // router.replace to be a no-op when the URL is already at "/".
-            // A full reload bypasses this entirely.
-            setRole(null);
             window.location.href = "/";
           } else {
-            // Native: pop out of any nested tab/stack group, replace to
-            // the root index, THEN clear role. Clearing role first would
-            // unmount the whole (admin)/(psp)/(lp) tree before navigation
-            // completes, which can leave the user on a blank screen.
             try {
-              // dismissAll exists on newer expo-router; ignore if missing.
               (router as any).dismissAll?.();
             } catch {}
             router.replace("/");
-            setTimeout(() => setRole(null), 50);
           }
         }}
       >

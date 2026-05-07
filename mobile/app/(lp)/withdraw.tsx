@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Alert } from "react-native";
-import { PublicKey } from "@solana/web3.js";
 import {
   PaymateColors,
   Spacing,
@@ -13,11 +12,8 @@ import {
 import { StatCard } from "../../src/components/StatCard";
 import { PrimaryButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
-import {
-  fetchLpAccount,
-  projectedYield,
-  withdrawUsdc,
-} from "../../src/lib/onchain";
+import { projectedYield, withdrawUsdc } from "../../src/lib/onchain";
+import { api } from "../../src/lib/api";
 
 const accent = roleTheme("LP").accent;
 
@@ -29,11 +25,8 @@ export default function LpWithdraw() {
 
   const refresh = useCallback(async () => {
     if (!publicKey) return;
-    try {
-      setLp(await fetchLpAccount(new PublicKey(publicKey)));
-    } catch {
-      setLp(null);
-    }
+    const r = await api.lpState(publicKey);
+    setLp(r.ok ? r.data : null);
   }, [publicKey]);
 
   useEffect(() => {

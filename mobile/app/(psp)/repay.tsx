@@ -11,7 +11,6 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
-import { PublicKey } from "@solana/web3.js";
 import {
   PaymateColors,
   Spacing,
@@ -20,25 +19,35 @@ import {
 } from "../../constants/theme";
 import { PrimaryButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
-import { fetchPspAccount, repayDrawdown } from "../../src/lib/onchain";
+import { repayDrawdown } from "../../src/lib/onchain";
+import { api } from "../../src/lib/api";
+
+type PspState = {
+  creditLimit: number;
+  personalRateBps: number;
+  activePositionAmount: number;
+  activePositionDrawdownTs: number;
+};
 
 const accent = roleTheme("PSP").accent;
 
 export default function PspRepay() {
   const { publicKey } = useWallet();
-  const [psp, setPsp] = useState<Awaited<ReturnType<typeof fetchPspAccount>>>(null);
+  const [psp, setPsp] = useState<PspState | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [paying, setPaying] = useState(false);
   const [tick, setTick] = useState(0); // re-render every second to update fee
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "ok"; sig: string; usdc: number }
+    | { kind: "err"; msg: string }
+  >({ kind: "idle" });
 
   const load = useCallback(async () => {
     if (!publicKey) return;
     setRefreshing(true);
-    try {
-      setPsp(await fetchPspAccount(new PublicKey(publicKey)));
-    } catch {
-      setPsp(null);
-    }
+    const r = await api.pspState(publicKey);
+    setPsp(r.ok ? r.data : null);
     setRefreshing(false);
   }, [publicKey]);
 
@@ -73,15 +82,16 @@ export default function PspRepay() {
   const handleRepay = async () => {
     if (!publicKey || !hasActive) return;
     setPaying(true);
+    setStatus({ kind: "idle" });
     try {
       const r = await repayDrawdown({ ownerPubkey: publicKey, amountMicro: total });
-      Alert.alert(
-        "Repayment confirmed",
-        `Paid $${(total / 1e6).toFixed(4)} (principal + fee)\nTx: ${r.signature.slice(0, 12)}…`,
-      );
+      setStatus({ kind: "ok", sig: r.signature, usdc: total / 1e6 });
       load();
     } catch (err) {
-      Alert.alert("Repay failed", err instanceof Error ? err.message : String(err));
+      setStatus({
+        kind: "err",
+        msg: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setPaying(false);
     }
@@ -137,6 +147,24 @@ export default function PspRepay() {
               accent={accent}
             />
           </View>
+
+          {status.kind === "ok" && (
+            <View style={styles.successBanner}>
+              <Text style={styles.successTitle}>
+                ✓ Repaid ${status.usdc.toFixed(4)} on-chain
+              </Text>
+              <Text style={styles.successBody}>
+                Tx: {status.sig.slice(0, 16)}…{"\n"}
+                Position closed. Fee accrued went to the pool's reserve as LP yield.
+              </Text>
+            </View>
+          )}
+          {status.kind === "err" && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorTitle}>Repay not completed</Text>
+              <Text style={styles.errorBody}>{status.msg}</Text>
+            </View>
+          )}
 
           <View style={styles.noteCard}>
             <Text style={styles.noteTitle}>How the fee is computed</Text>
@@ -250,5 +278,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     fontFamily: "monospace",
+  },
+
+  successBanner: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.success,
+    backgroundColor: "rgba(16,185,129,0.10)",
+  },
+  successTitle: {
+    color: PaymateColors.success,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  successBody: {
+    color: PaymateColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "monospace",
+  },
+  errorBanner: {
+    marginTop: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: PaymateColors.error,
+    backgroundColor: "rgba(239,68,68,0.08)",
+  },
+  errorTitle: {
+    color: PaymateColors.error,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  errorBody: {
+    color: PaymateColors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
 });

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+lambda.zip
+*.log
+
+# NEVER commit private keys
+.secrets/

@@ -1,7 +1,7 @@
 // Persistent top bar — shown on every authenticated screen.
 // Logo (PayMate, "Mate" colored) + role pill + wallet pill.
 
-import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { PaymateColors, Spacing, Radius, roleTheme } from "../../constants/theme";
 import { useRole } from "../lib/role";
@@ -9,8 +9,8 @@ import { useWallet, shortAddr } from "../lib/wallet";
 
 export function TopBar() {
   const router = useRouter();
-  const { role, setRole } = useRole();
-  const { publicKey, disconnect } = useWallet();
+  const { role } = useRole();
+  const { publicKey } = useWallet();
 
   if (!role) return null;
   const theme = roleTheme(role);
@@ -19,21 +19,13 @@ export function TopBar() {
     <View style={styles.bar}>
       <Pressable
         style={styles.brand}
-        onPress={async () => {
-          // Clear role + wallet FIRST so the splash auto-redirect doesn't
-          // immediately bounce us back into the role's tab tree. The state
-          // update is synchronous from the React perspective; the AsyncStorage
-          // writes finish in the background.
-          setRole(null);
-          await disconnect();
-          if (Platform.OS === "web" && typeof window !== "undefined") {
-            window.location.href = "/";
-          } else {
-            try {
-              (router as any).dismissAll?.();
-            } catch {}
-            router.replace("/");
-          }
+        onPress={() => {
+          // Push to dedicated /logout route. The route's component clears all
+          // session state on mount in a useEffect, then redirects to splash.
+          // This pattern avoids the lifecycle races we hit when clearing state
+          // + navigating from inside TopBar's onPress (TopBar unmounts during
+          // its own handler).
+          router.replace("/logout");
         }}
       >
         <Text style={styles.brandText}>

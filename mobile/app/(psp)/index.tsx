@@ -15,7 +15,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import {
   PaymateColors,
   Spacing,
@@ -74,6 +74,14 @@ export default function PspPosition() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Re-fetch every time the screen is focused, so when admin approves in another
+  // tab and the user comes back here, they see the fresh state immediately.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   // Source of truth for "is this PSP approved":
   //   1. DDB submission status (set by /admin/approve when on-chain set_credit_limit

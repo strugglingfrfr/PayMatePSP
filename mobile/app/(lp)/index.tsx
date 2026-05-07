@@ -11,6 +11,7 @@
 //   5. Yield projection (when amount is typed)
 
 import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import {
   ScrollView,
   View,
@@ -79,6 +80,14 @@ export default function LpDeposit() {
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
+
+  // Re-fetch on tab focus so cross-screen state changes (e.g. PSP draws after
+  // user opened LP tab) are reflected immediately.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const principal = lp?.depositedAmount ?? 0;
   const yieldNow = lp ? projectedYield(principal, lp.lastDepositTs) : 0;

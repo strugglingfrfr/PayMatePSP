@@ -11,6 +11,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import {
   PaymateColors,
   Spacing,
@@ -54,6 +55,12 @@ export default function PspRepay() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   // Tick once a second so the accrued fee + days display updates live.
   useEffect(() => {

@@ -13,6 +13,7 @@ import {
   Alert,
   RefreshControl,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import {
   PaymateColors,
   Spacing,
@@ -43,6 +44,12 @@ export default function AdminPsps() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const filtered = psps.filter((p) =>
     tab === "approved" ? p.status === "approved" : p.status !== "approved",

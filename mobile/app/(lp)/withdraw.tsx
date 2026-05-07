@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollView, View, Text, StyleSheet, Alert } from "react-native";
+import { useFocusEffect } from "expo-router";
 import {
   PaymateColors,
   Spacing,
@@ -32,6 +33,12 @@ export default function LpWithdraw() {
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   const principal = lp?.depositedAmount ?? 0;
   const yieldEst = lp ? projectedYield(principal, lp.lastDepositTs) : 0;

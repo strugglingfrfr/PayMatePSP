@@ -27,6 +27,7 @@ import { PrimaryButton, OutlineButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
 import { requestDrawdown } from "../../src/lib/onchain";
 import { api, type PoolState, type KybSubmission } from "../../src/lib/api";
+import { friendlyError } from "../../src/lib/errors";
 
 type PspState = {
   creditLimit: number;
@@ -133,10 +134,7 @@ export default function PspPosition() {
       setDrawAmount("");
       load();
     } catch (err) {
-      setDrawStatus({
-        kind: "err",
-        msg: err instanceof Error ? err.message : String(err),
-      });
+      setDrawStatus({ kind: "err", msg: friendlyError(err) });
     } finally {
       setDrawing(false);
     }

@@ -22,6 +22,7 @@ import { PrimaryButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
 import { repayDrawdown } from "../../src/lib/onchain";
 import { api } from "../../src/lib/api";
+import { friendlyError } from "../../src/lib/errors";
 
 type PspState = {
   creditLimit: number;
@@ -77,10 +78,16 @@ export default function PspRepay() {
 
   if (hasActive && psp) {
     principal = psp.activePositionAmount;
-    const elapsed = Math.max(1, Math.floor(Date.now() / 1000) - psp.activePositionDrawdownTs);
-    fee = Math.floor((principal * psp.personalRateBps * elapsed) / (86400 * 10_000));
+    // Pad elapsed by 60 seconds so when the tx lands on-chain a few seconds later,
+    // the on-chain Clock::get() value is still <= our calculated time and the
+    // repay() instruction's `principal + fee_due <= amount` check passes.
+    // Without this padding, simulation fails when client clock < Solana clock.
+    // The pad cost is negligible (60s of fee on $3 at 45 bps = ~9 micro-USDC = $0.000009).
+    const rawElapsed = Math.max(1, Math.floor(Date.now() / 1000) - psp.activePositionDrawdownTs);
+    const padded = rawElapsed + 60;
+    fee = Math.floor((principal * psp.personalRateBps * padded) / (86400 * 10_000));
     total = principal + fee;
-    elapsedDays = (elapsed / 86400).toFixed(2);
+    elapsedDays = (rawElapsed / 86400).toFixed(2);
     rateLabel = `${(psp.personalRateBps / 100).toFixed(2)}%/day`;
   }
   // Reference tick to keep linter happy
@@ -95,10 +102,7 @@ export default function PspRepay() {
       setStatus({ kind: "ok", sig: r.signature, usdc: total / 1e6 });
       load();
     } catch (err) {
-      setStatus({
-        kind: "err",
-        msg: err instanceof Error ? err.message : String(err),
-      });
+      setStatus({ kind: "err", msg: friendlyError(err) });
     } finally {
       setPaying(false);
     }

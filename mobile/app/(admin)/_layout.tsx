@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
 import { View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { PaymateColors, roleTheme } from "../../constants/theme";
 import { TopBar } from "../../src/components/TopBar";
 
@@ -21,9 +22,33 @@ export default function AdminLayout() {
           tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
         }}
       >
-        <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
-        <Tabs.Screen name="psps" options={{ title: "PSPs" }} />
-        <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Dashboard",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="grid-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="psps"
+          options={{
+            title: "PSPs",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="business-outline" size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="activity"
+          options={{
+            title: "Activity",
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="pulse-outline" size={size} color={color} />
+            ),
+          }}
+        />
       </Tabs>
     </View>
   );

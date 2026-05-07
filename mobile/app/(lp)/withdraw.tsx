@@ -15,6 +15,7 @@ import { PrimaryButton } from "../../src/components/Button";
 import { useWallet } from "../../src/lib/wallet";
 import { projectedYield, withdrawUsdc } from "../../src/lib/onchain";
 import { api } from "../../src/lib/api";
+import { friendlyError } from "../../src/lib/errors";
 
 const accent = roleTheme("LP").accent;
 
@@ -60,10 +61,7 @@ export default function LpWithdraw() {
       );
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      Alert.alert(
-        "Withdraw failed",
-        err instanceof Error ? err.message : String(err),
-      );
+      Alert.alert("Withdraw failed", friendlyError(err));
     } finally {
       setLoading(false);
     }

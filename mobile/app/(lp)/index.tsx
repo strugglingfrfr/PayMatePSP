@@ -35,6 +35,7 @@ import {
   type PoolState,
   type KybSubmission,
 } from "../../src/lib/api";
+import { friendlyError } from "../../src/lib/errors";
 
 const accent = roleTheme("LP").accent;
 
@@ -142,10 +143,7 @@ export default function LpDeposit() {
       setAmount("");
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      Alert.alert(
-        "Deposit failed",
-        err instanceof Error ? err.message : String(err),
-      );
+      Alert.alert("Deposit failed", friendlyError(err));
     } finally {
       setLoading(false);
     }

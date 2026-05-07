@@ -15,8 +15,8 @@ Built at **EasyA Consensus Miami 2026**, targeting:
 
 ## Demo
 
-> Loom walkthrough: _(link added after recording)_
-> 90-second demo video: _(link added after recording)_
+> **Audio walkthrough (~4 min, with audio):** https://www.loom.com/share/8e4104d875394056972317ab5e89f2dd
+> **App demo on Solana Seeker (~2 min):** https://www.loom.com/share/3886019c187a4f369101f16e056b49e6
 
 ### Screenshots
 

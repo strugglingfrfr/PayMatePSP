@@ -193,6 +193,11 @@ type TransactResult = { signature: string };
  * Wrapper around MWA `transact` that builds a versioned tx from a list of
  * instructions and asks the user's wallet to sign + send. Throws in non-Android
  * envs; UI should catch and surface to the user.
+ *
+ * MWA `transact()` opens a fresh session every time. We pass the auth_token
+ * stored at initial connect to `reauthorize()` so the wallet recognizes us
+ * silently and only shows a sign prompt, not a connect prompt. If the token
+ * is missing or expired, we fall back to fresh authorize.
  */
 async function signAndSend(
   payer: PublicKey,
@@ -207,6 +212,8 @@ async function signAndSend(
   const { transact } = await import(
     "@solana-mobile/mobile-wallet-adapter-protocol-web3js"
   );
+  const { getAuthToken, DAPP_IDENTITY } = await import("./wallet");
+  const cachedToken = getAuthToken();
 
   const { blockhash } = await DEVNET.getLatestBlockhash();
   const message = new TransactionMessage({
@@ -217,10 +224,24 @@ async function signAndSend(
   const tx = new VersionedTransaction(message);
 
   return transact(async (wallet) => {
-    await wallet.authorize({
-      chain: "solana:devnet",
-      identity: { name: "PayMate", uri: "https://paymate.app" },
-    });
+    let authedOk = false;
+    if (cachedToken) {
+      try {
+        await wallet.reauthorize({
+          auth_token: cachedToken,
+          identity: DAPP_IDENTITY,
+        });
+        authedOk = true;
+      } catch {
+        // Token expired or wallet evicted it. Fall through to fresh authorize.
+      }
+    }
+    if (!authedOk) {
+      await wallet.authorize({
+        chain: "solana:devnet",
+        identity: DAPP_IDENTITY,
+      });
+    }
     const sigs = await wallet.signAndSendTransactions({ transactions: [tx] });
     // MWA returns base58-encoded signatures already.
     return { signature: String(sigs[0]) };

@@ -3,6 +3,12 @@
 // On Android (Seeker) MWA opens the user's wallet (Phantom / Solflare / etc).
 // In Expo Go and on iOS, MWA is unavailable — we expose a `connectMock(pubkey)`
 // path so dev work isn't blocked. The mock signs nothing; only used for UI work.
+//
+// Critical detail: MWA's `transact()` opens a fresh session every time. To
+// avoid making the user re-approve their wallet on every signing, we capture
+// the `auth_token` returned from the initial `authorize()` call and pass it
+// to `reauthorize()` on subsequent transact sessions. This is what makes
+// signing feel like "just sign", not "connect again then sign".
 
 import {
   createContext,
@@ -15,6 +21,22 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { PublicKey } from "@solana/web3.js";
 import { Buffer } from "buffer";
+
+// Identity must match between authorize and reauthorize. MWA validates the
+// token against the dapp identity that minted it. Keep this constant.
+export const DAPP_IDENTITY = {
+  name: "PayMate",
+  uri: "https://github.com/strugglingfrfr/PayMatePSP",
+};
+
+const STATE_KEY = "paymate.wallet";
+const TOKEN_KEY = "paymate.authToken";
+
+// Module-level setter exposed for non-React modules (onchain.ts) that
+// need to read the current auth_token. Reading from AsyncStorage works
+// too but adds an unavoidable async hop inside transact() callbacks.
+let _authToken: string | null = null;
+export const getAuthToken = () => _authToken;
 
 type WalletState = {
   publicKey: string | null;
@@ -29,15 +51,21 @@ type Ctx = WalletState & {
 
 const WalletContext = createContext<Ctx | null>(null);
 
-const KEY = "paymate.wallet";
-
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WalletState>({ publicKey: null, isMock: false });
 
-  const persist = useCallback(async (s: WalletState) => {
+  const persist = useCallback(async (s: WalletState, authToken?: string | null) => {
     setState(s);
-    if (s.publicKey) await AsyncStorage.setItem(KEY, JSON.stringify(s));
-    else await AsyncStorage.removeItem(KEY);
+    if (s.publicKey) {
+      await AsyncStorage.setItem(STATE_KEY, JSON.stringify(s));
+      if (authToken) {
+        _authToken = authToken;
+        await AsyncStorage.setItem(TOKEN_KEY, authToken);
+      }
+    } else {
+      _authToken = null;
+      await AsyncStorage.multiRemove([STATE_KEY, TOKEN_KEY]);
+    }
   }, []);
 
   // Real MWA connect (Android only, Solana Mobile Stack).
@@ -54,10 +82,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const result = await transact(async (wallet) => {
       const auth = await wallet.authorize({
         chain: "solana:devnet",
-        identity: {
-          name: "PayMate",
-          uri: "https://github.com/strugglingfrfr/PayMatePSP",
-        },
+        identity: DAPP_IDENTITY,
       });
       return auth;
     });
@@ -68,7 +93,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // shows, what the program PDAs are derived from). Convert here, once.
     const pubkeyBytes = Buffer.from(rawAddress, "base64");
     const base58 = new PublicKey(pubkeyBytes).toBase58();
-    await persist({ publicKey: base58, isMock: false });
+    await persist({ publicKey: base58, isMock: false }, result.auth_token);
   }, [persist]);
 
   // Dev fallback when MWA isn't available — accept a pasted pubkey.

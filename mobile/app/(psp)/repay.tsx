@@ -78,14 +78,16 @@ export default function PspRepay() {
 
   if (hasActive && psp) {
     principal = psp.activePositionAmount;
-    // Pad elapsed by 60 seconds so when the tx lands on-chain a few seconds later,
-    // the on-chain Clock::get() value is still <= our calculated time and the
-    // repay() instruction's `principal + fee_due <= amount` check passes.
-    // Without this padding, simulation fails when client clock < Solana clock.
-    // The pad cost is negligible (60s of fee on $3 at 45 bps = ~9 micro-USDC = $0.000009).
+    // Pad elapsed by 5 minutes + add 1000 micro-USDC ($0.001) flat buffer.
+    // When the tx lands on-chain a few seconds later, Solana's Clock::get()
+    // can drift forward of our local clock; if our calculated `total` is
+    // less than the on-chain `principal + fee_due`, the repay() instruction
+    // reverts ("simulation failed"). This pad guarantees we always cover.
+    // Cost is negligible: 5min @ 45bps/day on $3 = ~$0.000047. Plus $0.001 flat.
     const rawElapsed = Math.max(1, Math.floor(Date.now() / 1000) - psp.activePositionDrawdownTs);
-    const padded = rawElapsed + 60;
-    fee = Math.floor((principal * psp.personalRateBps * padded) / (86400 * 10_000));
+    const padded = rawElapsed + 300;
+    const accruedFee = Math.floor((principal * psp.personalRateBps * padded) / (86400 * 10_000));
+    fee = accruedFee + 1000; // +$0.001 flat safety
     total = principal + fee;
     elapsedDays = (rawElapsed / 86400).toFixed(2);
     rateLabel = `${(psp.personalRateBps / 100).toFixed(2)}%/day`;
@@ -98,8 +100,23 @@ export default function PspRepay() {
     setPaying(true);
     setStatus({ kind: "idle" });
     try {
-      const r = await repayDrawdown({ ownerPubkey: publicKey, amountMicro: total });
-      setStatus({ kind: "ok", sig: r.signature, usdc: total / 1e6 });
+      // Refetch on-chain state at submit time so the amount we calculate
+      // reflects the latest fee_due (in case the user sat on this screen for
+      // a while). Recompute total with the same padding as the live display.
+      const fresh = await api.pspState(publicKey);
+      let amountToPay = total;
+      if (fresh.ok && fresh.data && fresh.data.activePositionAmount > 0) {
+        const p = fresh.data.activePositionAmount;
+        const elapsedNow = Math.max(
+          1,
+          Math.floor(Date.now() / 1000) - fresh.data.activePositionDrawdownTs,
+        );
+        const padded = elapsedNow + 300;
+        const feeNow = Math.floor((p * fresh.data.personalRateBps * padded) / (86400 * 10_000));
+        amountToPay = p + feeNow + 1000;
+      }
+      const r = await repayDrawdown({ ownerPubkey: publicKey, amountMicro: amountToPay });
+      setStatus({ kind: "ok", sig: r.signature, usdc: amountToPay / 1e6 });
       load();
     } catch (err) {
       setStatus({ kind: "err", msg: friendlyError(err) });

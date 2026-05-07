@@ -13,6 +13,8 @@ import {
 } from "react";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PublicKey } from "@solana/web3.js";
+import { Buffer } from "buffer";
 
 type WalletState = {
   publicKey: string | null;
@@ -59,9 +61,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       });
       return auth;
     });
-    const pubkey = result.accounts[0]?.address;
-    if (!pubkey) throw new Error("No accounts returned from wallet");
-    await persist({ publicKey: pubkey, isMock: false });
+    const rawAddress = result.accounts[0]?.address;
+    if (!rawAddress) throw new Error("No accounts returned from wallet");
+    // MWA returns addresses as base64. The rest of our code expects the
+    // canonical base58 form (it's what PublicKey() can parse, what Solscan
+    // shows, what the program PDAs are derived from). Convert here, once.
+    const pubkeyBytes = Buffer.from(rawAddress, "base64");
+    const base58 = new PublicKey(pubkeyBytes).toBase58();
+    await persist({ publicKey: base58, isMock: false });
   }, [persist]);
 
   // Dev fallback when MWA isn't available — accept a pasted pubkey.

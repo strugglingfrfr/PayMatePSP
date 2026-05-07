@@ -13,8 +13,8 @@ const config = getDefaultConfig(__dirname);
 // these synchronously at bundle init, before any user module.
 const oldGetPolyfills =
   config.serializer.getPolyfills ?? (() => []);
-config.serializer.getPolyfills = () => [
-  ...oldGetPolyfills(),
+config.serializer.getPolyfills = (options) => [
+  ...oldGetPolyfills(options),
   path.resolve(__dirname, "polyfills.js"),
 ];
 

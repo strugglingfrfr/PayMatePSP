@@ -73,6 +73,55 @@ on a single phone with three role lenses: LP, PSP, Admin.
 
 ---
 
+## 2a. Why users want this
+
+**For Payment Service Providers (the demand side).** A licensed PSP
+running a NG–GB or MX–US corridor today has three choices when their
+working capital is locked: front USDC out of pocket, take a 5-to-8
+percent off-chain credit line, or turn the volume down. PayMate gives
+them a fourth option that's better than all three. They get an AI-priced
+credit limit on-chain in three seconds (versus weeks of paper-heavy
+underwriting). They self-serve drawdowns up to that limit (versus
+calling their bank). They pay basis points per day, not percent per
+drawdown (~30× cheaper at typical hold times). And the rate is set
+fairly by their KYR rating, not by a relationship manager. For a PSP
+who'd otherwise turn down a $10K daily volume because they can't front
+it, PayMate converts that decline into revenue at a cost they can
+underwrite.
+
+**For Liquidity Providers (the supply side).** USDC parked on Aave,
+Compound, or Solend earns 3-6 percent against anonymous over-
+collateralized borrowers. The yield is real but the counterparty story
+is weak. PayMate offers real-world yield against KYB-rigorous regulated
+payment operators. LPs can see the exact PSPs in the pool, their KYR
+ratings, and their personal rates. Duration is short (T+1 settlement
+cycles turn over fast), so capital stays liquid. Yield is denominated
+in USDC and flows pro-rata to the LP's deposit share. A USDC holder
+who wants real-world yield exposure but isn't comfortable with anon
+DeFi credit gets a regulated alternative that's as capital-efficient
+as the DeFi version because it's on Solana.
+
+**For the Solana ecosystem.** This is the kind of primitive Solana
+Mobile + cheap fees were designed for. A credit pool with frequent
+drawdown/repayment cycles, where each cycle costs sub-cent in fees, is
+viable on Solana and not on Ethereum. The whole product is mobile-first
+because PSPs in emerging-market corridors are mobile-first. MWA on
+Seeker gives us hardware-backed signing for free. Real-world payment
+volume comes on-chain via Solana, and the ecosystem gets a credit
+infrastructure layer that other protocols can build on (e.g. tranches,
+secondary markets, secured variants).
+
+**For the Coinbase x402 ecosystem.** PayMate is one of the first
+non-trivial agent-to-agent x402 deployments: an orchestrator pays a
+Risk Agent, which recursively pays a Compliance Sub-Agent, all in real
+USDC on Base. This proves the protocol's design intent — services
+demanding stablecoin settlement at the request boundary — works for
+real, recursive, autonomous workflows. Every KYB submission produces
+verifiable on-chain payment activity Coinbase can point at as a case
+study.
+
+---
+
 ## 3. Technical description
 
 PayMate is an integrated stack of Solana on-chain logic, AWS-hosted AI

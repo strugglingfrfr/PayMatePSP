@@ -20,21 +20,38 @@ Built at **EasyA Consensus Miami 2026**, targeting:
 
 ### Screenshots
 
-**LP role — pool composition + yield model**
+Captured on a Solana Seeker running APK build #8.
 
-![LP role showing Pool TVL, Pool Composition card with approved PSPs and per-PSP rates, and the Yield Model card mapping ratings to daily rates](./docs/screenshots/lp-pool.png)
+**Splash · role select**
+![PayMate splash screen on Seeker showing Instant Capital for Payment Service Providers, Stable Yield for LPs, the live Pool Status card, and three role-pick buttons](./docs/screenshots/01-splash.png)
 
-**PSP role — approved on-chain with Draw Funds**
+**LP · dashboard with Pool Composition**
+The LP sees their principal, realized yield, pool TVL and utilization, plus a transparency card listing every approved PSP in the pool with their KYR rating and personal rate.
+![LP dashboard showing Your Principal $5, Realized Yield $0.0002, Pool TVL $5, Utilization 80 percent, plus a Pool Composition card listing four approved PSPs with their KYR ratings and daily rates](./docs/screenshots/02-lp-dashboard.png)
 
-![PSP role showing $30 drawdown limit, KYR rating AA, 0.45 percent per day rate, pool utilization, and the Draw Funds form](./docs/screenshots/psp-approved.png)
+**LP · Yield Model + Deposit form**
+The Yield Model card explains the dynamic rating-to-rate map (AAA pays 0.30 percent per day, AA 0.45 percent, A 0.60 percent, B/C 0.85 percent). LPs see exactly how their yield is priced.
+![LP screen showing the Yield Model card with rating to rate mapping, plus a Deposit USDC form below](./docs/screenshots/03-lp-yield-model.png)
 
-**PSP — AI underwriting result (KYR score + AI reasoning)**
+**LP · Withdraw with realized yield**
+Live computed total: principal plus accrued yield from PSP repayment fees, distributed pro-rata.
+![LP withdraw screen showing Principal $5.00, Accrued Yield $0.0002, Total to Withdraw $5.0002 USDC, Earned over 0.4 days, with a green Withdraw All button](./docs/screenshots/04-lp-withdraw.png)
 
-![PSP KYR scoring screen with rating AA, score 86 out of 100, compliance checked via x402, score by section breakdown, and the model's literal reasoning text](./docs/screenshots/psp-kyr-scoring.png)
+**PSP · approved with active drawdown**
+The PSP has been admin-approved on-chain with a $30 credit limit at 0.45 percent per day. They've drawn $4 USDC; the live fee accrues by the second.
+![PSP position screen showing Drawdown Limit $30, Pool Available $1, KYR Rating AA 86 of 100, Daily Rate 0.45 percent, Pool Utilization 80 percent, Status Active drawn, and a card showing Amount Drawn $4 with Accrued Fee $0.0006 and an Executed badge plus a Repay Now button](./docs/screenshots/05-psp-position.png)
 
-**Admin — control room**
+**PSP · Repay with live fee math (and friendly error handling)**
+Repay screen pre-computes Total Due as principal plus the live-tracking fee, mirroring the on-chain math exactly. Errors are sanitized into clean user copy.
+![PSP repay screen showing Total Due $4.0017 broken down as Principal $4.00 plus Fee 0.0017 USDC at 0.45 percent per day, Day 0.04 of 30 day window, with a Repay Now button and an inline status banner reading Repay not completed You cancelled the transaction in the wallet](./docs/screenshots/06-psp-repay.png)
 
-![Admin PSP management showing the full list of submitted KYBs with rating pills and approval status pills](./docs/screenshots/admin-psps.png)
+**Admin · PSP Management (Pending Approval / Approved Pool tabs)**
+Two segmented tabs: Pending Approval (7) for KYBs awaiting credit approval, Approved Pool (4) for the active pool. Tap any row to expand the AI's KYR reasoning.
+![Admin PSP Management screen showing Pending Approval (7) tab active and Approved Pool (4) tab, with seven PSP rows each carrying a rating pill (AA, AAA, A) and an Awaiting status pill](./docs/screenshots/07-admin-psps.png)
+
+**Admin · Pool Operations dashboard**
+Live read of on-chain pool state: total liquidity, available, fee reserve, utilization, plus the program's configured drawdown limit, default PSP rate, LP APY, and the program ID.
+![Admin Pool Operations dashboard showing Total Liquidity $5, Available $1 USDC, Fee Reserve $0.0000 for yield, Utilization 80 percent high, plus a Pool Configuration card with drawdown limit $100 default rate 0.60 percent per day LP APY 5 percent fixed, a Yield Reserve card with reserve balance $0 and target 5 percent, and the program ID 5cuj7xG83GthayftBPcpppY6CsfMoPT9gmm1X62C3jCg](./docs/screenshots/08-admin-dashboard.png)
 
 ---
 

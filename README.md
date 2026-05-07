@@ -20,9 +20,21 @@ Built at **EasyA Consensus Miami 2026**, targeting:
 
 ### Screenshots
 
-| LP role (deposit + pool) | PSP role (apply, draw) | Admin (control room) |
-|---|---|---|
-| _(screenshot)_ | _(screenshot)_ | _(screenshot)_ |
+**LP role — pool composition + yield model**
+
+![LP role showing Pool TVL, Pool Composition card with approved PSPs and per-PSP rates, and the Yield Model card mapping ratings to daily rates](./docs/screenshots/lp-pool.png)
+
+**PSP role — approved on-chain with Draw Funds**
+
+![PSP role showing $30 drawdown limit, KYR rating AA, 0.45 percent per day rate, pool utilization, and the Draw Funds form](./docs/screenshots/psp-approved.png)
+
+**PSP — AI underwriting result (KYR score + AI reasoning)**
+
+![PSP KYR scoring screen with rating AA, score 86 out of 100, compliance checked via x402, score by section breakdown, and the model's literal reasoning text](./docs/screenshots/psp-kyr-scoring.png)
+
+**Admin — control room**
+
+![Admin PSP management showing the full list of submitted KYBs with rating pills and approval status pills](./docs/screenshots/admin-psps.png)
 
 ---
 
